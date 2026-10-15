@@ -1,0 +1,29 @@
+/* ---- storyboard */
+.sb-view { min-height: 60vh; border: 2px dashed transparent; border-radius: var(--radius-md); }
+.sb-view.over { border-color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 6%, transparent); }
+.sb-summary { margin: 0 0 16px; }
+.sb-grid {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px;
+}
+.sb-card {
+  position: relative; display: grid; gap: 8px; padding: 8px; cursor: grab;
+  background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md);
+}
+.sb-card.dragging { opacity: .5; }
+.sb-page {
+  position: absolute; top: -10px; left: 8px; padding: 0 8px; border-radius: var(--radius-pill);
+  background: var(--color-accent); color: var(--color-on-accent); font-size: 11px; line-height: 18px; font-weight: 600;
+}
+.sb-pic {
+  position: relative; width: 100%; display: grid; place-items: center; overflow: hidden;
+  background: var(--color-bg); border: 1px solid var(--color-border-input); border-radius: var(--radius-sm);
+}
+.sb-pic img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.sb-num {
+  position: absolute; top: 6px; left: 6px; min-width: 24px; height: 24px; padding: 0 6px; border-radius: var(--radius-pill);
+  background: var(--color-text); color: var(--color-bg); font-size: 12px; line-height: 24px; text-align: center;
+}
+.sb-card textarea { height: auto; resize: vertical; }
+.sb-actions { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.sb-actions select { height: 28px; max-width: 150px; }

@@ -1,0 +1,47 @@
+{
+  "name": "rottera",
+  "productName": "Rottera",
+  "version": "0.1.0",
+  "description": "Desktop screenwriting app (working name)",
+  "main": "out/main/index.js",
+  "author": "Rottera",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "electron-vite build && node tests/e2e/mcp-e2e.mjs . .e2e-shots",
+    "dist": "electron-vite build && electron-builder --win nsis",
+    "dist:portable": "node scripts/pack-portable.mjs",
+    "dist:linux": "node scripts/pack-linux.mjs",
+    "test:e2e:pw": "electron-vite build && playwright test"
+  },
+  "dependencies": {
+    "@fontsource/courier-prime": "^5.1.0",
+    "@fontsource/inter": "^5.1.0",
+    "@tiptap/core": "^2.10.0",
+    "@tiptap/extension-document": "^2.10.0",
+    "@tiptap/extension-history": "^2.10.0",
+    "@tiptap/extension-text": "^2.10.0",
+    "@tiptap/pm": "^2.10.0",
+    "@tiptap/react": "^2.10.0",
+    "fast-xml-parser": "^4.5.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.64.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "typescript": "^5.6.0",
+    "vite": "^5.4.0",
+    "vitest": "^2.1.0"
+  }
+}

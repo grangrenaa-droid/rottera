@@ -1,0 +1,35 @@
+/* ---- mapa de luz */
+.lm-view { display: grid; grid-template-columns: 220px minmax(0, 1fr) 280px; gap: 16px; align-items: start; }
+.lm-side, .lm-props {
+  background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  padding: 12px; display: grid; gap: 8px; max-height: calc(100vh - 170px); overflow: auto;
+}
+.lm-side h2, .lm-props h2 { margin: 8px 0 4px; }
+.lm-side h3 { margin: 8px 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--color-text-muted); }
+.lm-maps, .lm-items { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.lm-maps button, .lm-items button {
+  width: 100%; text-align: left; padding: 6px 8px; border: 1px solid transparent; border-radius: var(--radius-sm);
+  background: transparent; cursor: pointer; color: inherit; display: grid; gap: 2px;
+}
+.lm-maps button.on, .lm-items button.on { background: color-mix(in srgb, var(--color-accent) 14%, transparent); border-color: var(--color-accent); }
+.lm-items button { font-size: 12px; }
+.lm-palette { display: grid; gap: 4px; }
+.lm-piece {
+  display: flex; gap: 8px; align-items: center; padding: 4px 8px; border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm); background: var(--color-bg); cursor: pointer; text-align: left; color: inherit;
+}
+.lm-piece:hover { border-color: var(--color-accent); }
+.lm-icon { width: 28px; height: 28px; flex: none; background: #fff; border-radius: 4px; display: grid; place-items: center; }
+.lm-name { font-weight: 600; min-width: 160px; }
+.lm-scroll { overflow: auto; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-canvas); padding: 16px; max-height: calc(100vh - 250px); }
+.lm-surface { margin: 0 auto; outline: none; touch-action: none; background: #fff; box-shadow: var(--shadow-page); }
+.lm-surface:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 2px; }
+.lm-surface svg { display: block; width: 100%; height: auto; user-select: none; }
+.lm-form { display: grid; gap: 6px; }
+.lm-form label { font-weight: 600; font-size: 12px; }
+.lm-form input { width: 100%; }
+.lm-empty { max-width: 520px; margin: 48px auto; text-align: center; display: grid; gap: 12px; justify-items: center; }
+@media (max-width: 1100px) {
+  .lm-view { grid-template-columns: 200px minmax(0, 1fr); }
+  .lm-props { grid-column: 1 / -1; max-height: none; }
+}

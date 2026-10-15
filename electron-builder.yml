@@ -1,0 +1,42 @@
+appId: app.rottera.desktop
+productName: Rottera
+directories:
+  output: dist
+files:
+  - out/**
+  - package.json
+  - build/icon.png
+asar: true
+extraResources:
+  - from: mcp
+    to: mcp
+fileAssociations:
+  - ext: rottera
+    name: Roteiro Rottera
+    description: Roteiro do Rottera
+    icon: build/icon.ico
+  - ext: rotera
+    name: Roteiro (Rotera)
+    description: Roteiro salvo antes do nome Rottera
+    icon: build/icon.ico
+  - ext: clapboard
+    name: Roteiro (formato antigo)
+    description: Roteiro salvo antes do nome Rotera
+    icon: build/icon.ico
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+  signAndEditExecutable: false
+  artifactName: ${productName}-Setup-${version}.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+linux:
+  icon: build/icon.png
+  category: Office
+  executableName: rottera

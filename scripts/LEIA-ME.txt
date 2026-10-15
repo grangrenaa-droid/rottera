@@ -1,0 +1,39 @@
+ROTTERA 0.1.0 (versão de teste)
+Editor de roteiro para Windows (há também uma versão para Linux).
+Seu roteiro fica no seu computador, sem conta e sem internet.
+
+COMO ABRIR
+1. Se o arquivo .zip veio da internet ou de uma mensagem: clique nele com o botão direito,
+   Propriedades, e se aparecer a opção "Desbloquear", marque e confirme. Depois descompacte.
+2. Abra a pasta e dê dois cliques em Rottera.exe. Não precisa instalar.
+3. Se o Windows mostrar "O Windows protegeu seu PC": clique em "Mais informações" e depois
+   em "Executar assim mesmo". Isso acontece porque este programa de teste ainda não tem
+   assinatura digital (que é paga). Ele não faz nada fora do que está descrito aqui.
+
+COMO COMEÇAR
+- "Novo roteiro", ou "Novo a partir de modelo" e escolha "Aprenda o formato", que ensina escrevendo.
+- Dentro do programa tem um manual: tecle F1.
+
+ONDE FICA O SEU TEXTO
+- Nos arquivos .rottera que você salvar, no lugar que escolher. O programa também salva sozinho.
+- Arquivos .rotera, de quando o programa se chamava Rotera, abrem normalmente.
+- O programa guarda até 40 versões anteriores de cada roteiro (Mais, depois "Versões anteriores").
+  Elas ficam no mesmo computador. Para uma cópia de segurança de verdade, copie o arquivo .rottera
+  para outro lugar também.
+- Os dados do programa ficam na pasta %APPDATA%\Rottera.
+
+PRIVACIDADE
+- O programa não envia nada para ninguém e não tem conta.
+- A conexão com o Claude é opcional, fica desligada até você querer, e só funciona neste computador.
+
+SE ALGO DER ERRADO
+- Menu Ajuda, "Copiar diagnóstico": mostra um texto com versão e erros recentes. Ele não leva o
+  seu roteiro nem nomes de arquivos. Cole numa mensagem para quem te enviou o programa.
+- Se o programa fechar sozinho, ao abrir de novo ele avisa e oferece o último roteiro.
+
+O QUE AINDA NÃO TEM
+- Sem colaboração em tempo real. Sem instalador. É uma versão de teste: não guarde
+  aqui a única cópia de um trabalho importante.
+
+PARA REMOVER
+- Apague a pasta do programa. Para apagar também os dados, apague %APPDATA%\Rottera.

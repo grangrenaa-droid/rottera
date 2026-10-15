@@ -1,0 +1,8 @@
+node_modules
+out
+dist
+.tmp
+.e2e-shots
+*.log
+test-results
+playwright-report

@@ -1,0 +1,40 @@
+ROTTERA 0.1.0 para Linux (versão de teste)
+Editor de roteiro. Seu roteiro fica no seu computador, sem conta e sem internet.
+Funciona em Linux de 64 bits (x86-64): Ubuntu, Mint, Debian, Fedora e outros.
+
+COMO ABRIR
+1. Descompacte o arquivo:  tar -xzf Rottera-0.1.0-linux-x64.tar.gz
+   (ou clique com o botão direito nele e "Extrair aqui"). Coloque a pasta onde quiser.
+2. Dentro da pasta, rode:  ./abrir-rottera.sh
+3. Para ter o Rottera no menu de aplicativos, rode uma vez:  ./instalar.sh
+   Ele pergunta se você quer ativar o isolamento do Chromium (pede a senha de administrador).
+   É opcional: sem isso o programa abre do mesmo jeito.
+   Se mudar a pasta de lugar, rode ./instalar.sh de novo.
+
+COMO COMEÇAR
+- "Novo roteiro", ou "Novo a partir de modelo" e escolha "Aprenda o formato", que ensina escrevendo.
+- Dentro do programa tem um manual: tecle F1.
+
+ONDE FICA O SEU TEXTO
+- Nos arquivos .rottera que você salvar, no lugar que escolher. O programa também salva sozinho.
+- Os arquivos são os mesmos do Windows: um roteiro salvo num abre no outro.
+- O programa guarda até 40 versões anteriores de cada roteiro (Mais, depois "Versões anteriores").
+  Para uma cópia de segurança de verdade, copie o arquivo .rottera para outro lugar também.
+- Os dados do programa ficam na pasta ~/.config/Rottera.
+
+PRIVACIDADE
+- O programa não envia nada para ninguém e não tem conta.
+- A conexão com o Claude é opcional, fica desligada até você querer, e só funciona neste computador.
+
+SE ALGO DER ERRADO
+- Se não abrir, rode ./abrir-rottera.sh num terminal e veja a mensagem que aparece.
+- Menu Ajuda, "Copiar diagnóstico": mostra um texto com versão e erros recentes. Ele não leva o
+  seu roteiro nem nomes de arquivos. Cole numa mensagem para quem te enviou o programa.
+
+O QUE AINDA NÃO TEM
+- Dois cliques num arquivo .rottera ainda não abrem o programa: abra pelo menu Arquivo.
+- É uma versão de teste: não guarde aqui a única cópia de um trabalho importante.
+
+PARA REMOVER
+- Rode ./instalar.sh --remover (tira do menu) e apague a pasta.
+  Para apagar também os dados, apague ~/.config/Rottera.
