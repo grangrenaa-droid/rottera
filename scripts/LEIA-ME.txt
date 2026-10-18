@@ -1,4 +1,4 @@
-ROTTERA 0.1.0 (versão de teste)
+ROTTERA 0.1.1 (versão de teste)
 Editor de roteiro para Windows (há também uma versão para Linux).
 Seu roteiro fica no seu computador, sem conta e sem internet.
 

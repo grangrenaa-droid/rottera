@@ -1,9 +1,9 @@
-ROTTERA 0.1.0 para Linux (versão de teste)
+ROTTERA 0.1.1 para Linux (versão de teste)
 Editor de roteiro. Seu roteiro fica no seu computador, sem conta e sem internet.
 Funciona em Linux de 64 bits (x86-64): Ubuntu, Mint, Debian, Fedora e outros.
 
 COMO ABRIR
-1. Descompacte o arquivo:  tar -xzf Rottera-0.1.0-linux-x64.tar.gz
+1. Descompacte o arquivo:  tar -xzf Rottera-0.1.1-linux-x64.tar.gz
    (ou clique com o botão direito nele e "Extrair aqui"). Coloque a pasta onde quiser.
 2. Dentro da pasta, rode:  ./abrir-rottera.sh
 3. Para ter o Rottera no menu de aplicativos, rode uma vez:  ./instalar.sh

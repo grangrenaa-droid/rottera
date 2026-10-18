@@ -7,12 +7,13 @@
 //
 // usage: npm run dist:portable
 import { execSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const run = (cmd) => execSync(cmd, { cwd: root, stdio: 'inherit' })
+const version = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version
 
 run('npx electron-vite build')
 // Only used to get a correct app.asar; its edited executable is not shipped.
@@ -32,7 +33,7 @@ cpSync(join(root, 'mcp'), join(out, 'resources', 'mcp'), { recursive: true })
 cpSync(join(root, 'scripts', 'LEIA-ME.txt'), join(out, 'LEIA-ME.txt'))
 
 if (process.platform === 'win32') {
-  const zip = join(root, 'dist', 'Rottera-0.1.0-win-x64-portable.zip')
+  const zip = join(root, 'dist', `Rottera-${version}-win-x64-portable.zip`)
   rmSync(zip, { force: true })
   execSync(
     `powershell -NoProfile -Command "Compress-Archive -Path '${out}\\*' -DestinationPath '${zip}' -CompressionLevel Optimal"`,

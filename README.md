@@ -6,8 +6,8 @@ Editor de roteiros para Windows e Linux. Os roteiros ficam no seu computador: se
 
 Na página de [Releases](../../releases), baixe o arquivo do seu sistema:
 
-- **Windows:** `Rottera-0.1.0-windows-x64.zip`. Descompacte e abra `Rottera.exe`; não precisa instalar.
-- **Linux (64 bits):** `Rottera-0.1.0-linux-x64.tar.gz`. Descompacte e rode `./abrir-rottera.sh`; `./instalar.sh` coloca o programa no menu.
+- **Windows:** o arquivo que termina em `-windows-x64.zip`. Descompacte e abra `Rottera.exe`; não precisa instalar.
+- **Linux (64 bits):** o arquivo que termina em `-linux-x64.tar.gz`. Descompacte e rode `./abrir-rottera.sh`; `./instalar.sh` coloca o programa no menu.
 
 Cada pacote traz um `LEIA-ME.txt` com o passo a passo. É uma versão de teste: guarde também uma cópia dos seus roteiros em outro lugar.
 
