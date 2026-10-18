@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode
 import type { Beat, Block, Board, CharacterSheet, Extras, Kind, LightMap, Paper, RevisionState, Script, Storyboard, TitlePage } from '../shared/types'
 import { emptyScript, emptyStoryboard } from '../shared/types'
 import { LABELS } from '../shared/elements'
-import { paginate } from '../shared/paginate'
+import { paginate, type PageLine } from '../shared/paginate'
 import type { MenuAction, RecentItem, SessionInfo } from '../shared/api'
 import { folderOf, whenOpened } from '../shared/recent'
 import { isDark, toggleTheme, type Theme } from '../shared/theme'
@@ -15,6 +15,7 @@ import type { Template } from '../shared/templates'
 import { Editor, ELEMENT_OPTIONS, type CaretInfo, type EditorHandle } from './Editor'
 import { BoardView } from './Board'
 import { StoryboardView } from './Storyboard'
+import { ScriptPage } from './ScriptPage'
 import { LightMapView } from './LightMap'
 import { ReportsView } from './Reports'
 import { ConnectDialog, DiagnosticsDialog, ManualDialog, SmartTypeDialog, TemplatesDialog, TitleDialog, VersionsDialog } from './Dialogs'
@@ -276,6 +277,24 @@ export function App(): JSX.Element {
   useEffect(() => {
     void refreshHome()
   }, [refreshHome])
+
+  // the first page of the last script and its page count, for the home screen; null falls back to its title
+  const [preview, setPreview] = useState<{ path: string; lines: PageLine[]; pages: number; paper: Paper } | null>(null)
+  const lastPath = recent[0]?.path
+  useEffect(() => {
+    if (view !== 'home' || !lastPath) return setPreview(null)
+    let live = true
+    void window.api.peekScript(lastPath).then((s) => {
+      if (!live) return
+      if (!s) return setPreview(null)
+      const paper = s.paper ?? 'letter'
+      const { pages } = paginate(s.blocks, paper)
+      setPreview({ path: lastPath, paper, lines: pages[0] ?? [], pages: pages.length })
+    })
+    return () => {
+      live = false
+    }
+  }, [view, lastPath])
 
   // ------------------------------------------------------------ saving
   const saveNow = useCallback(async (forceDialog = false): Promise<void> => {
@@ -782,6 +801,7 @@ export function App(): JSX.Element {
   // ------------------------------------------------------------ render
   if (view === 'home') {
     const [last, ...older] = recent
+    const sheet = preview && last && preview.path === last.path ? preview : null
     return (
       <div className="home">
         <header className="home-head">
@@ -833,19 +853,27 @@ export function App(): JSX.Element {
         <div className="home-main">
           <figure className="home-page">
             {last ? (
-              <button className="title-page" onClick={() => void doOpenRecent(last)} title={last.path}>
-                <span className="title-page-title">{last.name}</span>
+              <button className={sheet ? 'title-page script' : 'title-page'} onClick={() => void doOpenRecent(last)} title={last.path}>
+                {sheet ? (
+                  <ScriptPage lines={sheet.lines} paper={sheet.paper} />
+                ) : (
+                  <span className="title-page-title">{last.name}</span>
+                )}
                 <span className="title-page-action">Continuar escrevendo</span>
               </button>
             ) : (
-              <button className="title-page blank" onClick={doNew}>
-                <span className="title-page-title">Sem título</span>
+              <button className="title-page script" onClick={doNew}>
+                <ScriptPage lines={[]} paper="letter" caret />
                 <span className="title-page-action">Começar um roteiro</span>
               </button>
             )}
             <figcaption className="muted">
               {last ? (
                 <>
+                  {sheet && <strong className="home-page-name">{last.name}</strong>}
+                  {sheet && (
+                    <span className="home-page-count">{sheet.pages === 1 ? '1 página' : `${sheet.pages} páginas`}</span>
+                  )}
                   Aberto {whenOpened(last.openedAt)}
                   {folderOf(last.path) && <>, na pasta {folderOf(last.path)}</>}
                 </>

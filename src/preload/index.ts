@@ -4,6 +4,7 @@ import type { BridgeRequest, RoteraApi, MenuAction } from '../shared/api'
 const api: RoteraApi = {
   openFile: () => ipcRenderer.invoke('file:open'),
   readFile: (path) => ipcRenderer.invoke('file:read', path),
+  peekScript: (path) => ipcRenderer.invoke('file:peek', path),
   saveFile: (path, script, suggestedName) => ipcRenderer.invoke('file:save', { path, script, suggestedName }),
   importFile: () => ipcRenderer.invoke('file:import'),
   exportFile: (format, script, suggestedName) =>

@@ -1,4 +1,4 @@
-import type { Script } from './types'
+import type { Block, Paper, Script } from './types'
 
 export interface OpenResult {
   path: string
@@ -108,6 +108,8 @@ export interface ConnectInfo {
 export interface RoteraApi {
   openFile(): Promise<OpenResult | null>
   readFile(path: string): Promise<OpenResult>
+  /** Only the text of a script, for a preview: no backup, no recent-list entry. Null when it cannot be read. */
+  peekScript(path: string): Promise<{ blocks: Block[]; paper?: Paper } | null>
   saveFile(path: string | null, script: Script, suggestedName: string): Promise<string | null>
   importFile(): Promise<{ script: Script; name: string } | null>
   exportFile(format: ExportFormat, script: Script, suggestedName: string): Promise<string | null>

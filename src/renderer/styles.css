@@ -78,13 +78,40 @@ textarea { height: auto; padding: 8px 10px; width: 100%; resize: vertical; }
   font: 700 15px/22px var(--font-script); text-transform: uppercase; overflow-wrap: anywhere;
   text-decoration: underline; text-underline-offset: 4px;
 }
-.title-page.blank .title-page-title { color: var(--color-paper-muted); text-decoration: none; }
 /* the whole sheet is one button; this is drawn as its visible call to action */
 .title-page-action {
   display: inline-flex; align-items: center; height: 32px; padding: 0 14px; border-radius: var(--radius-md);
   background: var(--color-accent); color: var(--color-on-accent); font-size: 13px; font-weight: 600; white-space: nowrap;
 }
 .title-page:hover .title-page-action { filter: brightness(0.92); }
+/* the card as a real script page: the sheet sets its own height (letter or A4), the action floats over a fade */
+.title-page.script { display: block; position: relative; padding: 0; aspect-ratio: auto; overflow: hidden; }
+.title-page.script::after {
+  content: ''; position: absolute; inset: auto 0 0; height: 72px; pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--color-paper) 65%);
+}
+.title-page.script .title-page-action { position: absolute; z-index: 1; left: 50%; bottom: 18px; transform: translateX(-50%); }
+.home-page-name { display: block; color: var(--color-text); font-weight: 600; overflow-wrap: anywhere; }
+.home-page-count { display: block; }
+/* 10 characters and 6 lines per inch of paper, measured from the sheet's own width */
+.mini-page {
+  display: block; position: relative; width: 100%; container-type: inline-size; text-align: left;
+  /* its own layer: the tiny type gets grey antialiasing instead of ClearType colour fringes */
+  will-change: transform;
+  --ch: calc(100cqw / (var(--inches) * 10)); --ln: calc(100cqw / (var(--inches) * 6));
+}
+.mini-page-body {
+  display: block; padding-top: calc(6 * var(--ln));
+  font-family: var(--font-script); font-size: calc(var(--ch) / 0.6); line-height: var(--ln);
+}
+.mini-page-row { display: block; position: relative; height: var(--ln); }
+.mini-page-line { position: absolute; top: 0; white-space: pre; }
+.mini-page-caret {
+  display: inline-block; vertical-align: top; width: max(1px, calc(var(--ch) * 0.2)); height: var(--ln); margin-left: 1px;
+  background: var(--color-accent); animation: mini-page-blink 1.1s steps(1) infinite;
+}
+@keyframes mini-page-blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .mini-page-caret { animation: none; } }
 .home-side { display: grid; gap: 32px; min-width: 0; }
 .home-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; max-width: 500px; }
 /* narrow windows: a smaller sheet and one column of actions, so nothing wraps or gets cut */

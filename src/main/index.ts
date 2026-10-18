@@ -172,6 +172,15 @@ function registerIpc(): void {
     return { path, script }
   })
 
+  ipcMain.handle('file:peek', (_e, path: string) => {
+    try {
+      const s = parseScriptFile(readFileSync(path, 'utf8'))
+      return { blocks: s.blocks, paper: s.paper }
+    } catch {
+      return null
+    }
+  })
+
   ipcMain.handle(
     'file:save',
     async (_e, a: { path: string | null; script: Script; suggestedName: string }): Promise<string | null> => {
