@@ -10,10 +10,12 @@ const DEFAULT_TIMES = ['DIA', 'NOITE', 'MANHÃ', 'TARDE', 'ENTARDECER', 'AMANHEC
 const INTROS = ['INT. ', 'EXT. ', 'INT./EXT. ']
 
 export function parseHeading(text: string): { intro: string; location: string; time: string; hasSep: boolean } {
-  const m = /^(INT\/EXT|INT\.\/EXT|INT|EXT|EST|I\/E)\.?\s*(.*)$/i.exec(text.trim())
+  // a dash right after the intro ("INT.- CAFETERIA", "EXT. - RUA") is not part of the location
+  const m = /^(INT\/EXT|INT\.\/EXT|INT|EXT|EST|I\/E)\.?\s*(?:[-–—]\s*)?(.*)$/i.exec(text.trim())
   if (!m) return { intro: '', location: '', time: '', hasSep: false }
   const rest = m[2]
-  const idx = rest.indexOf(' - ')
+  // the time is the last part: in "CINE ESTRELA - CABINE - NOITE" the location is "CINE ESTRELA - CABINE"
+  const idx = rest.lastIndexOf(' - ')
   if (idx === -1) return { intro: m[1].toUpperCase(), location: rest.trim(), time: '', hasSep: false }
   return {
     intro: m[1].toUpperCase(),
@@ -69,10 +71,11 @@ export function suggest(kind: Block['kind'], text: string, lists: Lists): Sugges
     const h = parseHeading(text)
     if (!h.intro) return null
     if (h.hasSep) {
-      const idx = text.indexOf(' - ') + 3
+      const idx = text.lastIndexOf(' - ') + 3
       const typed = text.slice(idx).toUpperCase()
       const items = lists.times.filter((t) => starts(t, typed))
-      return items.length ? { from: idx, items } : null
+      if (items.length) return { from: idx, items }
+      // no time starts like that: maybe a place inside a place ("CINE ESTRELA - CA..."), so try the locations
     }
     const idx = text.search(/\s/) + 1
     if (idx <= 0) return null

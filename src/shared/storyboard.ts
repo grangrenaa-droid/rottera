@@ -57,12 +57,19 @@ export function storyboardPages(sb: Pick<Storyboard, 'frames' | 'aspect' | 'layo
   const availH = cellH - captionH
   const fw = Math.min(cellW, availH * ratio)
   const fh = fw / ratio
-  // Rows only take the height their content needs, so wide frames do not leave big empty bands.
-  const rowH = Math.min(cellH, fh + captionH)
   const per = lay.cols * lay.rows
+  // the caption's lines (9 pt Courier, 11 pt apart), roughly: a little short of the width, as words wrap whole
+  const lineH = 11 / 72
+  const perLine = Math.max(10, Math.floor(((cellW * 72) / 5.4) * 0.88))
+  const captionNeeds = (text: string | undefined): number =>
+    (1 + (text ?? '').split('\n').reduce((n, l) => n + Math.max(1, Math.ceil(l.length / perLine)), 0)) * lineH + 0.12
 
   const pages: SbPage[] = []
   for (let i = 0; i < sb.frames.length; i += per) {
+    // Rows only take the height their content needs, so wide frames do not leave big empty bands; a long caption
+    // takes the room that is left on the page before it is cut.
+    const longest = Math.max(...sb.frames.slice(i, i + per).map((f) => captionNeeds(f.caption)))
+    const rowH = Math.min(cellH, fh + Math.max(captionH, longest))
     const cells: Cell[] = []
     for (let k = 0; k < per && i + k < sb.frames.length; k++) {
       const col = k % lay.cols
@@ -103,8 +110,29 @@ export function cleanFrame(f: Partial<Frame>): Frame | null {
     id: typeof f.id === 'string' && f.id ? f.id : `frame-${Math.random().toString(36).slice(2, 10)}`,
     image,
     caption: typeof f.caption === 'string' ? f.caption.slice(0, 2000) : '',
-    scene: typeof f.scene === 'string' ? f.scene.slice(0, 40) : ''
+    scene: typeof f.scene === 'string' ? f.scene.slice(0, 40) : '',
+    ...(typeof f.sid === 'string' && f.sid && f.sid.length <= 64 ? { sid: f.sid } : {}),
+    ...shotOf(f)
   }
+}
+
+/** The shot fields of a frame, cleaned; only the ones that are set. */
+export function shotOf(f: Partial<Frame>): Pick<Frame, 'shot' | 'angle' | 'move' | 'lens'> {
+  const out: Pick<Frame, 'shot' | 'angle' | 'move' | 'lens'> = {}
+  const text = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 40) : undefined)
+  const shot = text(f.shot)
+  const angle = text(f.angle)
+  const move = text(f.move)
+  if (shot) out.shot = shot
+  if (angle) out.angle = angle
+  if (move) out.move = move
+  if (typeof f.lens === 'number' && Number.isFinite(f.lens) && f.lens >= 4 && f.lens <= 1200) out.lens = Math.round(f.lens * 10) / 10
+  return out
+}
+
+/** "Plano médio · Plongée · Travelling · 35 mm", or "". */
+export function shotText(f: Pick<Frame, 'shot' | 'angle' | 'move' | 'lens'>): string {
+  return [f.shot, f.angle, f.move, f.lens ? `${f.lens} mm` : ''].filter(Boolean).join(' · ')
 }
 
 /**

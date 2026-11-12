@@ -1,3 +1,4 @@
+import { cleanSynopsis } from './scriptfile'
 import type { Beat, Block, Board } from './types'
 
 /** A beat that has become a scene: the scene heading carries `bid` = the beat id. */
@@ -47,6 +48,9 @@ function sceneEnd(blocks: Block[], start: number): number {
 function blocksFor(beat: Beat): Block[] {
   const action = [beat.title, beat.body].filter(Boolean).join(': ')
   const out: Block[] = [{ kind: 'scene_heading', text: DEFAULT_HEADING, bid: beat.id }]
+  // the card's description stays with the scene as its synopsis, after the action line is rewritten
+  const syn = cleanSynopsis(beat.body || beat.title)
+  if (syn) out[0].syn = syn
   if (action) out.push({ kind: 'action', text: action })
   return out
 }

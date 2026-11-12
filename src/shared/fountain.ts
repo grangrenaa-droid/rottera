@@ -1,5 +1,6 @@
 import type { Block, Kind, Script } from './types'
 import { looksLikeSceneHeading } from './elements'
+import { cleanSynopsis } from './scriptfile'
 
 const TITLE_KEYS: Record<string, 'title' | 'author' | 'contact'> = {
   title: 'title',
@@ -66,8 +67,15 @@ export function parseFountain(source: string): Script {
       prevBlank = false
       continue
     }
-    if (t.startsWith('#') || t.startsWith('=')) continue // sections and synopses
     if (/^={3,}$/.test(t)) continue // page break
+    if (t.startsWith('=')) {
+      // a synopsis: it belongs to the scene heading it follows (other synopses, of sections, are dropped)
+      const last = blocks[blocks.length - 1]
+      const text = t.replace(/^=\s*/, '')
+      if (last && last.kind === 'scene_heading' && text) last.syn = cleanSynopsis(last.syn ? `${last.syn} ${text}` : text)
+      continue
+    }
+    if (t.startsWith('#')) continue // sections
 
     let kind: Kind
     let text = t
@@ -136,6 +144,14 @@ export function toFountain(script: Script): string {
   if (tp.contact) out.push(`Contact: ${oneLine(tp.contact)}`)
   if (out.length) out.push('')
 
+  // notes become Fountain notes, [[like this]], at the end of their line; loose notes go at the end of the script
+  const noteText = (t: string): string => `[[${t.replace(/\s*\n+\s*/g, ' ').replace(/\]\]/g, '] ]').trim()}]]`
+  const byAnchor = new Map<string, string[]>()
+  for (const n of script.notes ?? []) {
+    if (!n.text.trim()) continue
+    byAnchor.set(n.anchor, [...(byAnchor.get(n.anchor) ?? []), noteText(n.text)])
+  }
+
   let prev: Kind | null = null
   for (const b of script.blocks) {
     const text = b.text.trim()
@@ -149,6 +165,7 @@ export function toFountain(script: Script): string {
     switch (b.kind) {
       case 'scene_heading':
         out.push(looksLikeSceneHeading(text) ? safe.toUpperCase() : `.${safe.toUpperCase()}`)
+        if (b.syn && b.syn.trim()) out.push('', `= ${b.syn.trim()}`)
         break
       case 'character': {
         const u = safe.toUpperCase()
@@ -173,7 +190,14 @@ export function toFountain(script: Script): string {
       default:
         out.push(needsForce(text, out.length === 0) ? `!${safe}` : safe)
     }
+    const pinned = b.nid ? byAnchor.get(b.nid) : undefined
+    if (pinned && b.nid) {
+      out[out.length - 1] = `${out[out.length - 1]} ${pinned.join(' ')}`.trim()
+      byAnchor.delete(b.nid)
+    }
     prev = b.kind
   }
+  const loose = [...byAnchor.values()].flat()
+  if (loose.length) out.push('', ...loose)
   return out.join('\n') + '\n'
 }

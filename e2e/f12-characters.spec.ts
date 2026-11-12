@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Page } from '@playwright/test'
-import { axeViolations, bridgeInfo, expect, test, type Dialogs } from './fixtures'
+import { axeViolations, bridgeInfo, expect, setTheme, test, type Dialogs } from './fixtures'
 
 test.afterEach(({ errors }) => {
   expect(errors, 'console or page errors').toEqual([])
@@ -176,7 +176,7 @@ test.describe('F12 character sheets and presentation (Relatórios)', () => {
     const dir = await open(page, dialogs)
     await toSheets(page)
     await page.getByLabel('Conflito').fill('Teme ser deixada outra vez')
-    const f = join(dir, 'com-fichas.rotera')
+    const f = join(dir, 'com-fichas.rottera')
     await dialogs.save(f)
     await page.getByRole('button', { name: 'Salvar como…' }).click()
     await expect(page.locator('.status')).toContainText('Salvo')
@@ -242,13 +242,13 @@ test.describe('F12 character sheets and presentation (Relatórios)', () => {
     expect(long.ok).toBe(false)
   })
 
-  test('F12-A1 the sheet screen has no serious accessibility violations, light and dark', async ({ page, dialogs }) => {
+  test('F12-A1 the sheet screen has no serious accessibility violations, light and dark', async ({ app, page, dialogs }) => {
     await open(page, dialogs)
     await toSheets(page)
     await page.getByLabel('Objetivo').fill('Recomeçar')
     const found: string[] = []
-    for (const theme of ['light', 'night', 'midnight']) {
-      await page.getByLabel('Tema').selectOption(theme)
+    for (const theme of ['light', 'night', 'midnight'] as const) {
+      await setTheme(app, page, theme)
       await page.waitForTimeout(250)
       for (const v of await axeViolations(page)) found.push(`${theme}: ${v}`)
     }

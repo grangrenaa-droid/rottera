@@ -50,3 +50,29 @@ describe('BUG-008 paper size: Brazil prints on A4', () => {
     expect(parseScriptFile(JSON.stringify(raw)).paper).toBeUndefined()
   })
 })
+
+describe('scene numbers in the PDF', () => {
+  const script = (over: Partial<Script> = {}): Script =>
+    ({
+      titlePage: { title: '', author: '', contact: '' },
+      blocks: [
+        { kind: 'scene_heading', text: 'INT. COZINHA - DIA' },
+        { kind: 'action', text: 'Marina coa o café.' },
+        { kind: 'scene_heading', text: 'EXT. RUA - NOITE' }
+      ],
+      board: { lanes: [], beats: [] },
+      paper: 'a4',
+      ...over
+    }) as Script
+
+  it('prints each scene number in both margins when "Mostrar números de cena" is on', () => {
+    const html = buildPdfHtml(script({ numberScenes: true }))
+    expect(html.match(/<span class="sn"[^>]*>1<\/span>/g)).toHaveLength(2)
+    expect(html.match(/<span class="sn"[^>]*>2<\/span>/g)).toHaveLength(2)
+  })
+
+  it('also when the numbering is locked, and not at all otherwise', () => {
+    expect(buildPdfHtml(script({ scenesLocked: true }))).toContain('<span class="sn"')
+    expect(buildPdfHtml(script())).not.toContain('<span class="sn"')
+  })
+})

@@ -1,4 +1,6 @@
 import type { Block, Paper, Script } from './types'
+import type { AiClient } from './aiclients'
+import type { ReportSection } from './reportHtml'
 
 export interface OpenResult {
   path: string
@@ -11,7 +13,14 @@ export interface RecentItem {
   openedAt: string
 }
 
-export type ExportFormat = 'pdf' | 'storyboard-pdf' | 'lightmap-pdf' | 'characters-pdf' | 'fdx' | 'fountain'
+export type ExportFormat = 'pdf' | 'storyboard-pdf' | 'lightmap-pdf' | 'characters-pdf' | 'fdx' | 'fountain' | 'docx' | 'html'
+
+/** The second folder every saved script is also copied to (OneDrive, a pen drive...). */
+export interface CopyFolderInfo {
+  dir: string | null
+  /** The last copy since the app started: when, whether it worked, and where it went or why not. */
+  last: { at: string; ok: boolean; file?: string; error?: string } | null
+}
 
 export type MenuAction =
   | 'new'
@@ -24,11 +33,20 @@ export type MenuAction =
   | 'preview-pdf'
   | 'export-fdx'
   | 'export-fountain'
+  | 'export-docx'
+  | 'export-html'
+  | 'copy-folder'
   | 'title-page'
+  | 'watermark'
   | 'versions'
   | 'manual'
   | 'diagnostics'
   | 'toggle-navigator'
+  | 'toggle-notes'
+  | 'new-note'
+  | 'toggle-synopsis'
+  | 'edit-synopsis'
+  | 'read-aloud'
   | 'theme-auto'
   | 'theme-light'
   | 'theme-night'
@@ -44,6 +62,7 @@ export type MenuAction =
   | 'export-characters'
   | 'export-storyboard'
   | 'view-reports'
+  | 'view-shooting'
   | 'claude'
 
 export interface BridgeRequest {
@@ -90,6 +109,8 @@ export interface ReportPdfRequest {
   title: string
   columns: string[]
   rows: (string | number)[][]
+  /** Printed in groups with headings instead of `rows` (the shooting plan, day by day). */
+  sections?: ReportSection[]
   scriptTitle: string
   paper: 'a4' | 'letter'
   landscape: boolean
@@ -100,8 +121,8 @@ export interface ConnectInfo {
   bridgeFile: string
   mcpScript: string
   command: string
-  claudeCodeCommand: string
-  desktopConfig: string
+  /** What to paste into each AI app that can run a local MCP server. */
+  clients: AiClient[]
   packaged: boolean
 }
 
@@ -113,6 +134,10 @@ export interface RoteraApi {
   saveFile(path: string | null, script: Script, suggestedName: string): Promise<string | null>
   importFile(): Promise<{ script: Script; name: string } | null>
   exportFile(format: ExportFormat, script: Script, suggestedName: string): Promise<string | null>
+  copyFolderGet(): Promise<CopyFolderInfo>
+  /** Opens the folder picker; cancelling keeps the folder there was. */
+  copyFolderChoose(): Promise<CopyFolderInfo>
+  copyFolderClear(): Promise<CopyFolderInfo>
   /** Opens (or refreshes) a window showing the PDF that Exportar PDF would write. */
   previewPdf(script: Script, name: string): Promise<void>
   exportText(suggestedName: string, ext: string, content: string): Promise<string | null>

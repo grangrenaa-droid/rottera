@@ -90,7 +90,9 @@ await main.js(`(() => {
 })()`)
 const setNext = (open, save) => main.js(`globalThis.__next = { open: ${JSON.stringify(open)}, save: ${JSON.stringify(save)} }`)
 const clickText = (t) =>
-  page.js(`(() => { const b = [...document.querySelectorAll('button')].find(b => b.textContent.trim().startsWith(${JSON.stringify(t)})); if (!b) return false; b.click(); return true })()`)
+  (async () =>
+    (await page.js(`(() => { const name = (b) => b.textContent.trim() || b.getAttribute('aria-label') || ''; const b = [...document.querySelectorAll('button')].find(b => name(b).startsWith(${JSON.stringify(t)})); if (!b) return false; b.click(); return true })()`)) ||
+    ((await page.js(`(() => { const m = [...document.querySelectorAll('.toolbar button')].find(b => b.textContent.trim().startsWith('Mais')); if (!m) return false; m.click(); return true })()`)) && (await new Promise((r) => setTimeout(r, 150)), await page.js(`(() => { const name = (b) => b.textContent.trim() || b.getAttribute('aria-label') || ''; const b = [...document.querySelectorAll('button')].find(b => name(b).startsWith(${JSON.stringify(t)})); if (!b) return false; b.click(); return true })()`))))()
 const setValue = (selector, value) =>
   page.js(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); const proto = el.tagName === 'SELECT' ? HTMLSelectElement.prototype : el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype; Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, ${JSON.stringify(value)}); el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })) })()`)
 const itemCount = () => page.js(`document.querySelectorAll('.lm-surface [data-item]').length`)
@@ -265,8 +267,8 @@ await setNext(null, p('completo.pdf'))
 await clickText('Exportar PDF')
 await sleep(3500)
 check('PDF written', existsSync(p('completo.pdf')))
-// title + script pages + 3 map pages (all included by default)
-check('script PDF ends with the three map pages', pdfPages(p('completo.pdf')) === scriptPages + 1 + 3, `${pdfPages(p('completo.pdf'))} vs ${scriptPages}+1+3`)
+// title + script pages + 3 map pages (all included by default) + a technical sheet for each of the 2 maps with lights or a camera
+check('script PDF ends with the three map pages', pdfPages(p('completo.pdf')) === scriptPages + 1 + 3 + 2, `${pdfPages(p('completo.pdf'))} vs ${scriptPages}+1+3+2`)
 
 await page.js(`document.querySelectorAll('.lm-maps button')[1].click()`)
 await sleep(200)
@@ -275,12 +277,12 @@ await sleep(200)
 await setNext(null, p('menos.pdf'))
 await clickText('Exportar PDF')
 await sleep(3500)
-check('leaving one map out removes its page', pdfPages(p('menos.pdf')) === scriptPages + 1 + 2, String(pdfPages(p('menos.pdf'))))
+check('leaving one map out removes its page', pdfPages(p('menos.pdf')) === scriptPages + 1 + 2 + 2, String(pdfPages(p('menos.pdf'))))
 
 await setNext(null, p('so-mapas.pdf'))
 await clickText('Exportar mapas')
 await sleep(3500)
-check('maps-only PDF has all three maps', pdfPages(p('so-mapas.pdf')) === 3, String(pdfPages(p('so-mapas.pdf'))))
+check('maps-only PDF has all three maps and two technical sheets', pdfPages(p('so-mapas.pdf')) === 3 + 2, String(pdfPages(p('so-mapas.pdf'))))
 
 await clickText('Início')
 await sleep(900)

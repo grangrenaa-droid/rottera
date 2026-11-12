@@ -1,6 +1,9 @@
-import type { Beat, Block, Board, CharacterSheet, Kind, LightMap, Script, Storyboard, TitlePage } from '../shared/types'
+import type { Beat, Block, Board, CharacterSheet, Kind, LightMap, Note, NoteColor, Script, Storyboard, TitlePage } from '../shared/types'
+import { NOTE_COLORS, NOTE_MAX } from '../shared/notes'
+import { SYNOPSIS_MAX, cleanSynopsis } from '../shared/scriptfile'
 import { FIELDS, characterKey, listCharacters, newSheet, presentationOf } from '../shared/characters'
-import { ITEM_DEFS, ITEM_TYPES, cleanItem, newItem, newLightMap } from '../shared/lightmap'
+import { ITEM_DEFS, ITEM_TYPES, cleanItem, electricLoad, gearList, lightNumbers, mapWatts, newItem, newLightMap, techSummary } from '../shared/lightmap'
+import { shotOf } from '../shared/storyboard'
 import type { LightItemType } from '../shared/types'
 import { emptyStoryboard } from '../shared/types'
 import { isSafeImage } from '../shared/storyboard'
@@ -24,6 +27,7 @@ export interface BridgeContext {
   setStoryboard(sb: Storyboard): void
   setLightMaps(maps: LightMap[]): void
   setCharacters(sheets: CharacterSheet[]): void
+  setNotes(notes: Note[]): void
   save(): Promise<void>
   /** Called after every edit so the UI can show that the script changed from outside. */
   touched(what: string): void
@@ -43,6 +47,23 @@ function findMap(maps: LightMap[], ref: unknown): number {
   if (i < 0 || i >= maps.length) fail(`Mapa não encontrado (0 a ${maps.length - 1}, ou o nome).`)
   return i
 }
+
+const noteMeaning = (c: NoteColor): string => NOTE_COLORS.find((x) => x.id === c)?.label ?? c
+
+function noteColor(v: unknown): NoteColor {
+  const ids = NOTE_COLORS.map((c) => c.id) as string[]
+  if (typeof v !== 'string' || !ids.includes(v)) fail(`color deve ser ${ids.join(', ')}.`)
+  return v as NoteColor
+}
+
+function noteText(v: unknown): string {
+  if (typeof v !== 'string') fail('text deve ser texto.')
+  if (v.length > NOTE_MAX) fail(`Nota longa demais (máximo ${NOTE_MAX}).`)
+  return v
+}
+
+/** The technical-sheet fields of a light-map piece that the AI can read and write. */
+const TECH_KEYS = ['watts', 'kelvin', 'gel', 'diffusion', 'intensity', 'role', 'height', 'lens', 'sensor', 'move', 'shot', 'moveTo', 'moveVia', 'moveRot', 'endRange', 'panAngle', 'movePoints'] as const
 
 function fail(msg: string): never {
   throw new Error(msg)
@@ -117,7 +138,8 @@ export function createBridgeHandler(ctx: BridgeContext): (method: string, params
             index,
             kind: b.kind,
             text: b.text,
-            ...(b.dual ? { dual: true } : {})
+            ...(b.dual ? { dual: true } : {}),
+            ...(b.kind === 'scene_heading' && b.syn ? { synopsis: b.syn } : {})
           })),
           ...summary()
         }
@@ -140,6 +162,7 @@ export function createBridgeHandler(ctx: BridgeContext): (method: string, params
             number: nums[r.start],
             index: r.start,
             heading: bs[r.start].text,
+            synopsis: bs[r.start].syn ?? null,
             location: h.location || null,
             time: h.time || null,
             page: (pag.blockPage[r.start] ?? 0) + 1,
@@ -257,7 +280,8 @@ export function createBridgeHandler(ctx: BridgeContext): (method: string, params
 
       case 'get_reports': {
         const s: Script = { ...ctx.script(), blocks: blocks() }
-        const all = buildReports(s)
+        // the tables only: how the PDF groups a report is not data
+        const all = buildReports(s).map(({ printed: _printed, ...r }) => r)
         if (typeof p.id === 'string') {
           const r = all.find((x) => x.id === p.id)
           if (!r) fail(`Relatório desconhecido: ${p.id}`)
@@ -339,7 +363,8 @@ export function createBridgeHandler(ctx: BridgeContext): (method: string, params
             index: i,
             caption: f.caption,
             scene: f.scene,
-            hasImage: f.image !== ''
+            hasImage: f.image !== '',
+            ...shotOf(f)
           }))
         }
       }
@@ -348,7 +373,7 @@ export function createBridgeHandler(ctx: BridgeContext): (method: string, params
         const sb = ctx.script().storyboard ?? emptyStoryboard()
         if (typeof p.caption !== 'string' || p.caption.length > 2000) fail('caption deve ser texto de até 2000 caracteres.')
         const scene = typeof p.scene === 'string' ? p.scene.slice(0, 40) : ''
-        const frame = { id: newId('frame'), image: '', caption: p.caption, scene }
+        const frame = { id: newId('frame'), image: '', caption: p.caption, scene, ...shotOf(p as never) }
         const at = p.after === undefined ? sb.frames.length : int(p.after, 'after') + 1
         if (at < 0 || at > sb.frames.length) fail(`after fora do intervalo (-1 a ${sb.frames.length - 1}).`)
         const frames = sb.frames.slice()
@@ -368,9 +393,14 @@ export function createBridgeHandler(ctx: BridgeContext): (method: string, params
           caption: typeof p.caption === 'string' ? p.caption.slice(0, 2000) : cur.caption,
           scene: typeof p.scene === 'string' ? p.scene.slice(0, 40) : cur.scene
         }
+        // the shot: a value sets it, null or "" clears it
+        for (const k of ['shot', 'angle', 'move', 'lens'] as const) {
+          if (p[k] === null || p[k] === '') delete next[k]
+          else if (p[k] !== undefined) Object.assign(next, shotOf({ [k]: p[k] } as never))
+        }
         ctx.setStoryboard({ ...sb, frames: sb.frames.map((f, i) => (i === index ? next : f)) })
         ctx.touched('storyboard')
-        return { index, caption: next.caption, scene: next.scene }
+        return { index, caption: next.caption, scene: next.scene, ...shotOf(next) }
       }
 
       case 'set_frame_image': {
@@ -405,9 +435,21 @@ export function createBridgeHandler(ctx: BridgeContext): (method: string, params
             rotation: i.rotation,
             spread: i.spread,
             range: i.range,
-            length: i.length
-          }))
+            length: i.length,
+            ...(i.depth !== undefined ? { depth: i.depth } : {}),
+            // the technical sheet: what is set, plus the light's number on the drawing and a readable summary
+            ...Object.fromEntries(TECH_KEYS.filter((k) => i[k] !== undefined).map((k) => [k, i[k]])),
+            ...(lightNumbers(m).has(i.id) ? { number: lightNumbers(m).get(i.id) } : {}),
+            ...(techSummary(i) ? { summary: techSummary(i) } : {})
+          })),
+          load: electricLoad(mapWatts(m))
         }))
+      }
+
+      case 'get_lighting_gear': {
+        const maps = ctx.script().lightMaps ?? []
+        const gear = gearList(maps)
+        return { gear, load: electricLoad(gear.reduce((n, g) => n + g.watts * g.count, 0)) }
       }
 
       case 'create_lightmap': {
@@ -440,6 +482,8 @@ export function createBridgeHandler(ctx: BridgeContext): (method: string, params
         if (typeof p.spread === 'number') base.spread = p.spread
         if (typeof p.range === 'number') base.range = p.range
         if (typeof p.length === 'number') base.length = p.length
+        if (typeof p.depth === 'number') base.depth = p.depth
+        for (const k of TECH_KEYS) if (p[k] !== undefined) (base as unknown as Record<string, unknown>)[k] = p[k]
         const it = cleanItem(base, m.width, m.height)
         if (!it) fail('Peça inválida.')
         const next = maps.map((x, i) => (i === mi ? { ...x, items: [...x.items, it] } : x))
@@ -456,16 +500,21 @@ export function createBridgeHandler(ctx: BridgeContext): (method: string, params
         if (!Number.isInteger(ii) || ii < 0 || ii >= m.items.length) fail('Peça não encontrada neste mapa.')
         const cur = m.items[ii]
         const patch = { ...cur }
-        for (const k of ['x', 'y', 'rotation', 'spread', 'range', 'length'] as const) {
+        for (const k of ['x', 'y', 'rotation', 'spread', 'range', 'length', 'depth'] as const) {
           if (typeof p[k] === 'number') patch[k] = p[k] as number
         }
         if (typeof p.label === 'string') patch.label = p.label
+        // technical sheet: a value sets it, null clears it
+        for (const k of TECH_KEYS) {
+          if (p[k] === null) delete (patch as unknown as Record<string, unknown>)[k]
+          else if (p[k] !== undefined) (patch as unknown as Record<string, unknown>)[k] = p[k]
+        }
         const it = cleanItem(patch, m.width, m.height)
         if (!it) fail('Peça inválida.')
         const next = maps.map((x, i) => (i === mi ? { ...x, items: x.items.map((y, k) => (k === ii ? it : y)) } : x))
         ctx.setLightMaps(next)
         ctx.touched('lightmap')
-        return { map: mi, item: ii, x: it.x, y: it.y, rotation: it.rotation, label: it.label }
+        return { map: mi, item: ii, x: it.x, y: it.y, rotation: it.rotation, label: it.label, summary: techSummary(it) }
       }
 
       case 'remove_light_item': {
@@ -519,6 +568,86 @@ export function createBridgeHandler(ctx: BridgeContext): (method: string, params
         ctx.setCharacters(list)
         ctx.touched('characters')
         return { name: next.name, created: !found, filled: FIELDS.filter((f) => next[f.key].trim() !== '').map((f) => f.key) }
+      }
+
+      case 'set_synopsis': {
+        const bs = blocks()
+        if (typeof p.text !== 'string') fail('text deve ser texto ("" apaga a sinopse).')
+        if (p.text.length > SYNOPSIS_MAX) fail(`Sinopse longa demais (máximo ${SYNOPSIS_MAX}).`)
+        let at: number
+        if (p.scene !== undefined) {
+          const nums = sceneNumbers(bs, ctx.script().scenesLocked === true)
+          at = bs.findIndex((b, i) => b.kind === 'scene_heading' && nums[i] === String(p.scene))
+          if (at < 0) fail(`Cena ${String(p.scene)} não encontrada.`)
+        } else {
+          at = int(p.index, 'index')
+          if (at < 0 || at >= bs.length || bs[at].kind !== 'scene_heading') fail('index deve ser o índice de um cabeçalho de cena (veja get_outline).')
+        }
+        editor().setSynopsis(at, cleanSynopsis(p.text))
+        ctx.touched('synopsis')
+        return { index: at, synopsis: cleanSynopsis(p.text) || null }
+      }
+
+      case 'get_notes': {
+        const bs = blocks()
+        const where = new Map<string, number>()
+        bs.forEach((b, i) => {
+          if (b.nid && !where.has(b.nid)) where.set(b.nid, i)
+        })
+        const nums = sceneNumbers(bs, ctx.script().scenesLocked === true)
+        const heads = sceneRanges(bs)
+        const openOnly = p.open_only === true
+        return (ctx.script().notes ?? [])
+          .filter((n) => !openOnly || n.color !== 'green')
+          .map((n) => {
+            const block = where.get(n.anchor)
+            const sc = block === undefined ? undefined : heads.find((r) => block >= r.start && block < r.end)
+            return {
+              id: n.id,
+              text: n.text,
+              color: n.color,
+              meaning: noteMeaning(n.color),
+              block: block ?? null,
+              line: block === undefined ? null : { kind: bs[block].kind, text: bs[block].text },
+              scene: sc ? nums[sc.start] ?? null : null,
+              loose: block === undefined
+            }
+          })
+          .sort((a, b) => (a.block ?? Infinity) - (b.block ?? Infinity))
+      }
+
+      case 'add_note': {
+        const bs = blocks()
+        const at = int(p.block, 'block')
+        if (at < 0 || at >= bs.length) fail(`block fora do intervalo (0 a ${bs.length - 1}).`)
+        const text = noteText(p.text)
+        const color = p.color === undefined ? 'yellow' : noteColor(p.color)
+        const notes = ctx.script().notes ?? []
+        if (notes.length >= 2000) fail('No máximo 2000 notas.')
+        const anchor = editor().anchorBlocks([at])[0] ?? fail('Não foi possível prender a nota nessa linha.')
+        const note: Note = { id: newId('note'), text, color, anchor }
+        ctx.setNotes([...notes, note])
+        ctx.touched('notes')
+        return { id: note.id, block: at, color }
+      }
+
+      case 'update_note': {
+        const notes = ctx.script().notes ?? []
+        const found = notes.find((n) => n.id === p.id) ?? fail('Nota não encontrada (use o id de get_notes).')
+        const next: Note = { ...found }
+        if (p.text !== undefined) next.text = noteText(p.text)
+        if (p.color !== undefined) next.color = noteColor(p.color)
+        ctx.setNotes(notes.map((n) => (n.id === found.id ? next : n)))
+        ctx.touched('notes')
+        return { id: next.id, color: next.color, meaning: noteMeaning(next.color) }
+      }
+
+      case 'delete_note': {
+        const notes = ctx.script().notes ?? []
+        if (!notes.some((n) => n.id === p.id)) fail('Nota não encontrada (use o id de get_notes).')
+        ctx.setNotes(notes.filter((n) => n.id !== p.id))
+        ctx.touched('notes')
+        return { deleted: p.id }
       }
 
       case 'save_script':

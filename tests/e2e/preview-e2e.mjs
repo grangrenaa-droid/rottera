@@ -91,7 +91,9 @@ await main.js(`(() => {
 })()`)
 const setNext = (open, save) => main.js(`globalThis.__next = { open: ${JSON.stringify(open)}, save: ${JSON.stringify(save)} }`)
 const clickText = (t) =>
-  page.js(`(() => { const b = [...document.querySelectorAll('button')].find(b => b.textContent.trim().startsWith(${JSON.stringify(t)})); if (!b) return false; b.click(); return true })()`)
+  (async () =>
+    (await page.js(`(() => { const name = (b) => b.textContent.trim() || b.getAttribute('aria-label') || ''; const b = [...document.querySelectorAll('button')].find(b => name(b).startsWith(${JSON.stringify(t)})); if (!b) return false; b.click(); return true })()`)) ||
+    ((await page.js(`(() => { const m = [...document.querySelectorAll('.toolbar button')].find(b => b.textContent.trim().startsWith('Mais')); if (!m) return false; m.click(); return true })()`)) && (await new Promise((r) => setTimeout(r, 150)), await page.js(`(() => { const name = (b) => b.textContent.trim() || b.getAttribute('aria-label') || ''; const b = [...document.querySelectorAll('button')].find(b => name(b).startsWith(${JSON.stringify(t)})); if (!b) return false; b.click(); return true })()`))))()
 const pdfPages = (file) => {
   const t = readFileSync(file).toString('latin1')
   return { pages: (t.match(/\/Type\s*\/Page[^s]/g) || []).length, images: (t.match(/\/Subtype\s*\/Image/g) || []).length }
@@ -108,7 +110,7 @@ check('script imported', scriptPages >= 2, scriptPages)
 const previewFile = await main.js(`require('path').join(require('electron').app.getPath('userData'), 'preview.pdf')`)
 const windows = () =>
   main.js(`require('electron').BrowserWindow.getAllWindows().map(w => ({ title: w.getTitle(), url: w.webContents.getURL(), visible: w.isVisible() }))`)
-check('Visualizar button sits in the toolbar', await page.js(`(() => { const b = [...document.querySelectorAll('.toolbar button, button')].map(b => b.textContent.trim()); return b.indexOf('Visualizar') >= 0 && b.indexOf('Visualizar') === b.indexOf('Exportar PDF') - 1 })()`))
+check('Visualizar sits by Exportar PDF on the toolbar, or in Mais when the toolbar is full', await page.js(`(() => { const b = [...document.querySelectorAll('.toolbar button')].map(b => b.textContent.trim()); const v = b.indexOf('Visualizar'); return v < 0 ? b.some(x => x.startsWith('Mais')) : v === b.indexOf('Exportar PDF') - 1 })()`))
 await clickText('Visualizar')
 await sleep(3500)
 let ws = await windows()

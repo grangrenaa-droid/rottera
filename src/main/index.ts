@@ -1,17 +1,19 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, shell } from 'electron'
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, session, shell } from 'electron'
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import * as backups from './backups'
-import { arch, platform, release, totalmem } from 'node:os'
+import { arch, homedir, platform, release, totalmem } from 'node:os'
 import { formatDiagnostics, scrub } from '../shared/diagnostics'
 import { buildReportHtml, cleanReport, esc } from '../shared/reportHtml'
-import { basename, extname, join } from 'node:path'
-import type { MenuAction, OpenResult, RecentItem, ExportFormat, ConnectInfo, DiagnosticsStats, ReportPdfRequest } from '../shared/api'
+import { basename, extname, join, resolve } from 'node:path'
+import type { MenuAction, OpenResult, RecentItem, ExportFormat, ConnectInfo, DiagnosticsStats, ReportPdfRequest, CopyFolderInfo } from '../shared/api'
 import type { Script } from '../shared/types'
 import { parseScriptFile, serialize } from '../shared/scriptfile'
 import { parseFountain, toFountain } from '../shared/fountain'
+import { toDocx } from './docx'
 import { parseFdx, toFdx } from '../shared/fdx'
-import { buildPdfHtml, type PdfOptions } from './pdf'
+import { buildPdfHtml, scriptPageHtml, type PdfOptions } from './pdf'
 import { Bridge } from './bridge'
+import { aiClients, type McpServer } from '../shared/aiclients'
 
 const EXT = 'rottera'
 /** Names the app had before: those files still open, and keep their extension until Salvar como. */
@@ -30,6 +32,20 @@ function userFile(name: string): string {
   return join(dir, name)
 }
 
+/**
+ * Installed from the Microsoft Store, the app runs as a package: what it writes under AppData goes to a private
+ * folder that other programs do not see, and its own folder changes with each update. The AI clients start the
+ * connection script and read the bridge file, so in the package both live in ~/.rottera, and the script is started
+ * through the package's alias (rottera.exe), whose path stays the same.
+ */
+const inStorePackage = process.platform === 'win32' && process.windowsStore === true
+function sharedFile(name: string): string {
+  if (!inStorePackage) return userFile(name)
+  const dir = join(homedir(), '.rottera')
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  return join(dir, name)
+}
+
 /** Write to a temp file in the same folder, then rename, so a crash never leaves half a script. */
 function writeAtomic(path: string, data: string): void {
   const tmp = `${path}.tmp-${process.pid}`
@@ -42,6 +58,41 @@ function readJson<T>(path: string, fallback: T): T {
     return JSON.parse(readFileSync(path, 'utf8')) as T
   } catch {
     return fallback
+  }
+}
+
+// ---------------------------------------------------------------- settings and the copy folder
+interface Settings {
+  bridge?: boolean
+  /** Every saved script is also written here. */
+  copyDir?: string
+}
+function readSettings(): Settings {
+  return readJson<Settings>(userFile('settings.json'), {})
+}
+/** Changes some settings and keeps the others. */
+function writeSettings(patch: Partial<Settings>): void {
+  const next: Settings = { ...readSettings(), ...patch }
+  for (const k of Object.keys(next) as (keyof Settings)[]) if (next[k] === undefined) delete next[k]
+  writeFileSync(userFile('settings.json'), JSON.stringify(next), 'utf8')
+}
+
+let lastCopy: CopyFolderInfo['last'] = null
+const copyInfo = (): CopyFolderInfo => ({ dir: readSettings().copyDir ?? null, last: lastCopy })
+
+/** Writes the saved script into the copy folder too. A missing folder (pen drive out) is noted, never fatal. */
+function copyToFolder(path: string, data: string): void {
+  const dir = readSettings().copyDir
+  if (!dir) return
+  const at = new Date().toISOString()
+  try {
+    if (!existsSync(dir)) throw new Error('a pasta não está disponível (pen drive fora, ou pasta apagada ou renomeada)')
+    const target = join(dir, basename(path))
+    // the script already lives in that folder: it is its own copy
+    if (resolve(target).toLowerCase() !== resolve(path).toLowerCase()) writeAtomic(target, data)
+    lastCopy = { at, ok: true, file: target }
+  } catch (e) {
+    lastCopy = { at, ok: false, error: e instanceof Error ? e.message : String(e) }
   }
 }
 
@@ -207,6 +258,7 @@ function registerIpc(): void {
         }
       }
       writeAtomic(path, next)
+      copyToFolder(path, next)
       keepVersion(key, next, 'auto')
       recentAdd(path)
       return path
@@ -234,14 +286,18 @@ function registerIpc(): void {
     'file:export',
     async (_e, a: { format: ExportFormat; script: Script; suggestedName: string }): Promise<string | null> => {
       if (!win) return null
-      const ext = a.format === 'pdf' || a.format === 'storyboard-pdf' || a.format === 'lightmap-pdf' || a.format === 'characters-pdf' ? 'pdf' : a.format === 'fdx' ? 'fdx' : 'fountain'
+      const pdf = a.format === 'pdf' || a.format === 'storyboard-pdf' || a.format === 'lightmap-pdf' || a.format === 'characters-pdf'
+      const ext = pdf ? 'pdf' : a.format
+      const label = ext === 'docx' ? 'Documento do Word' : ext === 'html' ? 'Página da web' : ext.toUpperCase()
       const r = await dialog.showSaveDialog(win, {
         title: 'Exportar',
         defaultPath: `${a.suggestedName || 'Sem título'}.${ext}`,
-        filters: [{ name: ext.toUpperCase(), extensions: [ext] }]
+        filters: [{ name: label, extensions: [ext] }]
       })
       if (r.canceled || !r.filePath) return null
       if (a.format === 'fdx') writeFileSync(r.filePath, toFdx(a.script), 'utf8')
+      else if (a.format === 'docx') writeFileSync(r.filePath, toDocx(a.script))
+      else if (a.format === 'html') writeFileSync(r.filePath, scriptPageHtml(a.script), 'utf8')
       else if (a.format === 'fountain') writeFileSync(r.filePath, toFountain(a.script), 'utf8')
       else writeFileSync(r.filePath, await renderPdf(a.script, { storyboardOnly: a.format === 'storyboard-pdf', lightMapsOnly: a.format === 'lightmap-pdf', charactersOnly: a.format === 'characters-pdf' }))
       return r.filePath
@@ -249,6 +305,26 @@ function registerIpc(): void {
   )
 
   ipcMain.handle('file:previewPdf', (_e, a: { script: Script; name: string }) => showPreview(a.script, a.name))
+
+  ipcMain.handle('copyFolder:get', () => copyInfo())
+  ipcMain.handle('copyFolder:choose', async () => {
+    if (!win) return copyInfo()
+    const r = await dialog.showOpenDialog(win, {
+      title: 'Pasta para a cópia dos roteiros',
+      properties: ['openDirectory', 'createDirectory'],
+      defaultPath: readSettings().copyDir
+    })
+    if (!r.canceled && r.filePaths[0]) {
+      writeSettings({ copyDir: r.filePaths[0] })
+      lastCopy = null
+    }
+    return copyInfo()
+  })
+  ipcMain.handle('copyFolder:clear', () => {
+    writeSettings({ copyDir: undefined })
+    lastCopy = null
+    return copyInfo()
+  })
 
   ipcMain.handle('file:exportReportPdf', async (_e, req: ReportPdfRequest): Promise<string | null> => {
     if (!win) return null
@@ -289,7 +365,7 @@ function registerIpc(): void {
     if (!bridge) return connectInfo()
     if (enabled) await bridge.start()
     else bridge.stop()
-    writeFileSync(userFile('settings.json'), JSON.stringify({ bridge: enabled }), 'utf8')
+    writeSettings({ bridge: enabled })
     return connectInfo()
   })
 
@@ -455,40 +531,30 @@ async function showPreview(script: Script, name: string): Promise<void> {
   previewWin.focus()
 }
 
-// ---------------------------------------------------------------- Claude connection
+// ---------------------------------------------------------------- AI connection (MCP)
 function connectInfo(): ConnectInfo {
-  const bridgeFile = userFile('bridge.json')
+  const bridgeFile = sharedFile('bridge.json')
   const packaged = app.isPackaged
-  const mcpScript = packaged
-    ? join(process.resourcesPath, 'mcp', 'rottera-mcp.cjs')
-    : join(app.getAppPath(), 'mcp', 'rottera-mcp.cjs')
-  const exe = process.execPath
+  const mcpScript = inStorePackage
+    ? sharedFile('rottera-mcp.cjs')
+    : packaged
+      ? join(process.resourcesPath, 'mcp', 'rottera-mcp.cjs')
+      : join(app.getAppPath(), 'mcp', 'rottera-mcp.cjs')
+  const exe = inStorePackage ? join(process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'Microsoft', 'WindowsApps', 'rottera.exe') : process.execPath
   const q = (v: string): string => `"${v}"`
-  const claudeCodeCommand = packaged
-    ? `claude mcp add rottera -e ELECTRON_RUN_AS_NODE=1 -e ROTERA_BRIDGE_FILE=${q(bridgeFile)} -- ${q(exe)} ${q(mcpScript)}`
-    : `claude mcp add rottera -e ROTERA_BRIDGE_FILE=${q(bridgeFile)} -- node ${q(mcpScript)}`
-  const desktopConfig = JSON.stringify(
-    {
-      mcpServers: {
-        rottera: {
-          command: packaged ? exe : 'node',
-          args: [mcpScript],
-          env: packaged
-            ? { ELECTRON_RUN_AS_NODE: '1', ROTERA_BRIDGE_FILE: bridgeFile }
-            : { ROTERA_BRIDGE_FILE: bridgeFile }
-        }
-      }
-    },
-    null,
-    2
-  )
+  const server: McpServer = {
+    command: packaged ? exe : 'node',
+    args: [mcpScript],
+    env: packaged
+      ? { ELECTRON_RUN_AS_NODE: '1', ROTERA_BRIDGE_FILE: bridgeFile }
+      : { ROTERA_BRIDGE_FILE: bridgeFile }
+  }
   return {
     enabled: bridge?.info().enabled ?? false,
     bridgeFile,
     mcpScript,
     command: packaged ? `${q(exe)} ${q(mcpScript)}` : `node ${q(mcpScript)}`,
-    claudeCodeCommand,
-    desktopConfig,
+    clients: aiClients(server),
     packaged
   }
 }
@@ -524,13 +590,17 @@ function buildMenu(): void {
             item('Somente os mapas de luz (PDF)...', 'export-lightmap'),
             item('Somente as fichas de personagem (PDF)...', 'export-characters'),
             item('FDX (formato de roteiro)...', 'export-fdx'),
-            item('Fountain...', 'export-fountain')
+            item('Fountain...', 'export-fountain'),
+            item('Word (DOCX)...', 'export-docx'),
+            item('Página da web (HTML)...', 'export-html')
           ]
         },
         { type: 'separator' },
         item('Página de título...', 'title-page'),
+        item('Marca d’água...', 'watermark'),
         item('Versões anteriores...', 'versions'),
-        item('Conectar ao Claude...', 'claude'),
+        item('Cópia em outra pasta...', 'copy-folder'),
+        item('Conectar a uma IA...', 'claude'),
         item('Tela inicial', 'home'),
         { type: 'separator' },
         { role: 'quit', label: 'Sair' }
@@ -548,7 +618,9 @@ function buildMenu(): void {
         { role: 'selectAll', label: 'Selecionar tudo' },
         { type: 'separator' },
         item('Localizar e substituir...', 'find', 'CmdOrCtrl+F'),
-        item('Gerenciar SmartType...', 'smarttype')
+        item('Gerenciar SmartType...', 'smarttype'),
+        item('Nova nota na linha do cursor', 'new-note', 'CmdOrCtrl+Alt+M'),
+        item('Sinopse da cena do cursor', 'edit-synopsis', 'CmdOrCtrl+Alt+S')
       ]
     },
     {
@@ -559,8 +631,12 @@ function buildMenu(): void {
         item('Storyboard', 'view-storyboard', 'CmdOrCtrl+Alt+4'),
         item('Mapa de Luz', 'view-lightmap', 'CmdOrCtrl+Alt+5'),
         item('Relatórios', 'view-reports', 'CmdOrCtrl+Alt+3'),
+        item('Filmagem (decupagem e plano)', 'view-shooting', 'CmdOrCtrl+Alt+6'),
         { type: 'separator' },
         item('Mostrar ou ocultar navegador', 'toggle-navigator', 'CmdOrCtrl+\\'),
+        item('Mostrar ou ocultar notas', 'toggle-notes'),
+        item('Mostrar ou ocultar sinopses no roteiro', 'toggle-synopsis'),
+        item('Leitura em voz alta...', 'read-aloud', 'CmdOrCtrl+Shift+L'),
         { type: 'separator' },
         item('Tema automático (segue o Windows)', 'theme-auto'),
         item('Tema claro', 'theme-light'),
@@ -650,11 +726,22 @@ if (!gotLock) {
     logEvent('inicio', `versão ${app.getVersion()}${crashed ? '; a abertura anterior não terminou normalmente' : ''}`)
     app.on('render-process-gone', (_e, _wc, d) => logEvent('tela-caiu', `${d.reason} (código ${d.exitCode})`))
     app.on('child-process-gone', (_e, d) => logEvent('processo-caiu', `${d.type}: ${d.reason}`))
+    // On Linux the spell checker is Chromium's own and follows the system language (English on many
+    // installs), so scripts in Portuguese came out underlined. Windows and macOS use the system's checker.
+    if (process.platform === 'linux') session.defaultSession.setSpellCheckerLanguages(['pt-BR'])
     registerIpc()
     buildMenu()
     createWindow()
+    // the connection script comes with each version of the package; keep the copy the AI clients start up to date
+    if (inStorePackage) {
+      try {
+        copyFileSync(join(process.resourcesPath, 'mcp', 'rottera-mcp.cjs'), sharedFile('rottera-mcp.cjs'))
+      } catch (e) {
+        logEvent('erro-principal', `cópia do script da conexão com a IA: ${e instanceof Error ? e.message : String(e)}`)
+      }
+    }
     bridge = new Bridge(
-      userFile('bridge.json'),
+      sharedFile('bridge.json'),
       () => win,
       () => win?.webContents.send('bridge:activity')
     )

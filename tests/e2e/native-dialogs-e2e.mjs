@@ -81,7 +81,9 @@ const dialog = (args) =>
     execFile('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', helper, '-ProcessId', String(mainPid), ...args], { timeout: 40000 }, (e, out) => res(String(out).trim()))
   })
 const click = (t) =>
-  js(`(() => { const b = [...document.querySelectorAll('button')].find(b => b.textContent.trim().startsWith(${JSON.stringify(t)})); if (!b) return false; b.click(); return true })()`)
+  (async () =>
+    (await js(`(() => { const name = (b) => b.textContent.trim() || b.getAttribute('aria-label') || ''; const b = [...document.querySelectorAll('button')].find(b => name(b).startsWith(${JSON.stringify(t)})); if (!b) return false; b.click(); return true })()`)) ||
+    ((await js(`(() => { const m = [...document.querySelectorAll('.toolbar button')].find(b => b.textContent.trim().startsWith('Mais')); if (!m) return false; m.click(); return true })()`)) && (await new Promise((r) => setTimeout(r, 150)), await js(`(() => { const name = (b) => b.textContent.trim() || b.getAttribute('aria-label') || ''; const b = [...document.querySelectorAll('button')].find(b => name(b).startsWith(${JSON.stringify(t)})); if (!b) return false; b.click(); return true })()`))))()
 const blocks = () => js(`[...document.querySelectorAll('.sheet-content > p')].map(p => p.textContent)`)
 
 // ---- import through the real dialog
@@ -126,7 +128,9 @@ if (existsSync(pdf)) {
 // ---- export FDX and Fountain from the menu items
 await click('Mais')
 await sleep(200)
-await click('Exportar FDX')
+await click('Exportar…')
+await sleep(200)
+await click('FDX')
 const fdx = join(dir, 'saída.fdx')
 r = await dialog(['-Path', fdx])
 await sleep(800)

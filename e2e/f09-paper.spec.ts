@@ -81,7 +81,7 @@ test.describe('F09 paper size for printing', () => {
     await page.getByRole('button', { name: 'Mais' }).click()
     await page.getByLabel('Papel do PDF').selectOption('a4')
     await page.keyboard.press('Escape')
-    const f = join(dir, 'papel.rotera')
+    const f = join(dir, 'papel.rottera')
     await dialogs.save(f)
     await page.getByRole('button', { name: 'Salvar como…' }).click()
     await expect(page.locator('.status')).toContainText('Salvo')

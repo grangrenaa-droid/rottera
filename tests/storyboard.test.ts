@@ -39,6 +39,17 @@ describe('storyboard layout', () => {
       }
     }
   })
+  it('a long caption takes the room left on the page; short ones keep the rows tight', () => {
+    const short = storyboardPages(sb(6))[0].cells
+    const long = 'Uma descrição longa do quadro, com o plano, o movimento e o som, que passa de quatro linhas. '.repeat(3)
+    const grown = storyboardPages({ ...sb(6), frames: sb(6).frames.map((f, i) => (i === 2 ? { ...f, caption: long } : f)) })[0].cells
+    expect(grown[0].captionH).toBeGreaterThan(short[0].captionH) // the whole page's rows grow together
+    expect(grown[0].h).toBe(grown[5].h)
+    // never past the page
+    const last = grown[grown.length - 1]
+    expect(last.y + last.h).toBeLessThanOrEqual(SB_PAGE.height - SB_PAGE.bottom + 1e-6)
+  })
+
   it('never overlaps cells on a page', () => {
     for (const page of storyboardPages(sb(9, { layout: 9 }))) {
       for (const a of page.cells) {

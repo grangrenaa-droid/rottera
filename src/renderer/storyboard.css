@@ -27,3 +27,7 @@
 .sb-card textarea { height: auto; resize: vertical; }
 .sb-actions { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
 .sb-actions select { height: 28px; max-width: 150px; }
+
+/* the shot of a frame (shot list) */
+.sb-shot { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 4px; }
+.sb-shot select, .sb-shot input { height: 28px; min-width: 0; font-size: 13px; }

@@ -103,6 +103,12 @@ export async function menu(app: ElectronApplication, action: string): Promise<vo
   }, action)
 }
 
+/** Picks a theme the way the menu Exibir > Tema does, and waits until the screen uses it. */
+export async function setTheme(app: ElectronApplication, page: Page, theme: 'auto' | 'light' | 'night' | 'midnight'): Promise<void> {
+  await menu(app, `theme-${theme}`)
+  await expect.poll(() => page.evaluate(() => document.documentElement.getAttribute('data-theme'))).toBe(theme === 'auto' ? null : theme)
+}
+
 export async function axeViolations(page: Page): Promise<string[]> {
   await page.evaluate(axeSource)
   const violations = await page.evaluate(async () => {

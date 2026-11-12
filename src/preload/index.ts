@@ -10,6 +10,9 @@ const api: RoteraApi = {
   exportFile: (format, script, suggestedName) =>
     ipcRenderer.invoke('file:export', { format, script, suggestedName }),
   previewPdf: (script, name) => ipcRenderer.invoke('file:previewPdf', { script, name }),
+  copyFolderGet: () => ipcRenderer.invoke('copyFolder:get'),
+  copyFolderChoose: () => ipcRenderer.invoke('copyFolder:choose'),
+  copyFolderClear: () => ipcRenderer.invoke('copyFolder:clear'),
   exportText: (suggestedName, ext, content) => ipcRenderer.invoke('file:exportText', { suggestedName, ext, content }),
   exportReportPdf: (req) => ipcRenderer.invoke('file:exportReportPdf', req),
   recentList: () => ipcRenderer.invoke('recent:list'),

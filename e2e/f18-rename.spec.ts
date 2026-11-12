@@ -24,8 +24,8 @@ const legacyFile = (text: string): string =>
 
 test.describe('F18 the app now has its own name; what was made under the old one keeps working', () => {
   test('F18-H1 the window and the home screen carry the new name', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: 'Rotera', level: 1 })).toBeVisible()
-    expect(await page.title()).toBe('Rotera')
+    await expect(page.getByRole('heading', { name: 'Rottera', level: 1 })).toBeVisible()
+    expect(await page.title()).toBe('Rottera')
   })
 
   test('F18-H2 a file saved under the old name opens, and saving it writes the new format', async ({ page, dialogs }) => {
@@ -64,7 +64,7 @@ test.describe('F18 the app now has its own name; what was made under the old one
     writeFileSync(join(old, 'backups', 'abc', '1790000000000-auto.json'), legacyFile('Versão antiga.'), 'utf8')
     writeFileSync(join(old, 'bridge.json'), '{"port":1,"token":"x"}', 'utf8')
 
-    const userData = join(appData, 'Rotera')
+    const userData = join(appData, 'Rottera')
     const env = { ...process.env, ROTERA_LEGACY_APPDATA: appData } as Record<string, string>
     delete env.ELECTRON_RUN_AS_NODE
     const launch = (): ReturnType<typeof electron.launch> =>
@@ -76,7 +76,8 @@ test.describe('F18 the app now has its own name; what was made under the old one
     const page = await app.firstWindow()
     await page.waitForLoadState('domcontentloaded')
     await expect(page.getByRole('button', { name: 'Recuperar rascunho' })).toBeVisible()
-    await expect(page.locator('.recent-item', { hasText: 'meu' })).toBeVisible()
+    // the most recent script is the big page on the home screen, which carries its path as a tooltip
+    await expect(page.getByTitle(script, { exact: true }).first()).toBeVisible()
     await app.close()
 
     expect(existsSync(join(userData, 'migrated.json'))).toBe(true)

@@ -142,7 +142,9 @@ await main.js(`(() => {
 })()`)
 const setNext = (open, save) => main.js(`globalThis.__next = { open: ${JSON.stringify(open)}, save: ${JSON.stringify(save)} }`)
 const clickText = (t) =>
-  page.js(`(() => { const b = [...document.querySelectorAll('button')].find(b => b.textContent.trim().startsWith(${JSON.stringify(t)})); if (!b) return false; b.click(); return true })()`)
+  (async () =>
+    (await page.js(`(() => { const name = (b) => b.textContent.trim() || b.getAttribute('aria-label') || ''; const b = [...document.querySelectorAll('button')].find(b => name(b).startsWith(${JSON.stringify(t)})); if (!b) return false; b.click(); return true })()`)) ||
+    ((await page.js(`(() => { const m = [...document.querySelectorAll('.toolbar button')].find(b => b.textContent.trim().startsWith('Mais')); if (!m) return false; m.click(); return true })()`)) && (await new Promise((r) => setTimeout(r, 150)), await page.js(`(() => { const name = (b) => b.textContent.trim() || b.getAttribute('aria-label') || ''; const b = [...document.querySelectorAll('button')].find(b => name(b).startsWith(${JSON.stringify(t)})); if (!b) return false; b.click(); return true })()`))))()
 const cards = () => page.js(`document.querySelectorAll('.sb-card').length`)
 const caption = (i) => page.js(`document.querySelectorAll('.sb-card textarea')[${i}]?.value`)
 const setValue = (selector, value) =>
@@ -186,22 +188,22 @@ check('non-image file is refused', (await cards()) === 3)
 await setValue('.sb-card:nth-child(1) textarea', 'Plano aberto da cozinha, chuva na janela.')
 await sleep(200)
 check('caption typed', (await caption(0)) === 'Plano aberto da cozinha, chuva na janela.', await caption(0))
-const opts = await page.js(`[...document.querySelectorAll('.sb-card:nth-child(1) select option')].map(o => o.value)`)
+const opts = await page.js(`[...document.querySelectorAll('.sb-card:nth-child(1) select[id^=scene-] option')].map(o => o.value)`)
 check('scene list comes from the script', opts.length >= 3, JSON.stringify(opts))
-await setValue('.sb-card:nth-child(1) select', opts[1])
+await setValue('.sb-card:nth-child(1) select[id^=scene-]', opts[1])
 await clickText('Quadro vazio')
 await sleep(200)
 check('empty frame added', (await cards()) === 4)
 
 // a frame without a scene jumps next to the scene it is given, then goes back to the end
-await setValue('.sb-card:nth-child(4) select', opts[1])
+await setValue('.sb-card:nth-child(4) select[id^=scene-]', opts[1])
 await sleep(300)
-const jumped = await page.js(`[...document.querySelectorAll('.sb-card select')].map(s => s.value)`)
+const jumped = await page.js(`[...document.querySelectorAll('.sb-card select[id^=scene-]')].map(s => s.value)`)
 check('new frame jumps after the last frame of its scene', jumped[0] === opts[1] && jumped[1] === opts[1] && jumped[3] === '', JSON.stringify(jumped))
-check('jumped frame keeps the focus', await page.js(`document.activeElement === document.querySelectorAll('.sb-card select')[1]`))
+check('jumped frame keeps the focus', await page.js(`document.activeElement === document.querySelectorAll('.sb-card select[id^=scene-]')[1]`))
 for (const n of [2, 3]) await page.js(`document.querySelector('button[aria-label="Mover quadro ${n} para depois"]').click()`)
 await sleep(200)
-check('arrows still move it inside the list', (await page.js(`document.querySelectorAll('.sb-card select')[3].value`)) === opts[1])
+check('arrows still move it inside the list', (await page.js(`document.querySelectorAll('.sb-card select[id^=scene-]')[3].value`)) === opts[1])
 
 // reorder
 await setValue('.sb-card:nth-child(2) textarea', 'Segundo plano.')
@@ -304,7 +306,10 @@ check('PDF embeds the pictures', full.images >= 3, JSON.stringify(full))
 await setNext(null, p('so-storyboard.pdf'))
 await clickText('Mais')
 await sleep(200)
-await clickText('Exportar só o storyboard')
+await clickText('Exportar…')
+await sleep(200)
+// the export dialog's card, not the Storyboard tab of the toolbar
+await page.js(`[...document.querySelectorAll('dialog .template')].find((b) => b.textContent.startsWith('Storyboard')).click()`)
 await sleep(3500)
 check('storyboard-only PDF written', existsSync(p('so-storyboard.pdf')))
 const only = pdfPages(p('so-storyboard.pdf'))

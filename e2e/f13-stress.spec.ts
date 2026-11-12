@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import type { Page } from '@playwright/test'
-import { APP_DIR, bridgeInfo, expect, test } from './fixtures'
+import { APP_DIR, bridgeInfo, expect, menu, test } from './fixtures'
 
 test.afterEach(({ errors }) => {
   expect(errors, 'console or page errors').toEqual([])
@@ -71,7 +71,7 @@ async function heapMb(page: Page): Promise<number> {
   })
 }
 
-test('F13 a 300 page script with storyboard, light maps and sheets stays usable', async ({ page, dialogs, userData }) => {
+test('F13 a 300 page script with storyboard, light maps and sheets stays usable', async ({ app, page, dialogs, userData }) => {
   test.setTimeout(900_000)
   const dir = mkdtempSync(join(tmpdir(), 'rotera-f13-'))
   const t: Record<string, number> = {}
@@ -91,6 +91,10 @@ test('F13 a 300 page script with storyboard, light maps and sheets stays usable'
     return (await r.json()) as { ok: boolean; result?: any; error?: string }
   }
 
+  // Plain CSS locators from here on: with 1800 scenes on screen, Playwright's role and label lookups walk the whole
+  // accessibility tree inside the page and can keep it busy for more than 30 s, which is the tool's time, not the app's.
+  const tab = (name: string) => page.locator('.seg button', { hasText: new RegExp(`^${name}$`) })
+
   const src = join(dir, 'grande.fountain')
   writeFileSync(src, bigScript(), 'utf8')
   const heap0 = await heapMb(page)
@@ -98,47 +102,54 @@ test('F13 a 300 page script with storyboard, light maps and sheets stays usable'
   await dialogs.open(src)
   await clock('import', async () => {
     await page.getByRole('button', { name: 'Importar FDX ou Fountain…' }).click()
-    await expect(page.getByRole('textbox', { name: 'Texto do roteiro' })).toBeVisible({ timeout: 60_000 })
-    await expect(page.getByRole('complementary', { name: 'Navegador de cenas' })).toContainText(`Cenas (${SCENES})`, { timeout: 60_000 })
+    await expect(page.locator('.ProseMirror')).toBeVisible({ timeout: 60_000 })
+    await expect(page.locator('.nav')).toContainText(`Cenas (${SCENES})`, { timeout: 60_000 })
   })
   const pages = Number(/de (\d+)/.exec(await page.locator('.status').innerText())?.[1])
   t.pages = pages
   expect(pages).toBeGreaterThan(250)
 
   // navigator open on a long script: move a scene and jump to another
-  const nav = page.getByRole('complementary', { name: 'Navegador de cenas' })
+  const nav = page.locator('.nav')
   await clock('navigator-move-scene', async () => {
-    await nav.getByRole('button', { name: 'Descer cena 1', exact: true }).click()
+    await nav.locator('button[aria-label="Descer cena 1"]').click()
     await expect(nav.locator('.scene-text').first()).toHaveText('INT. LUGAR 1 - DIA')
   })
 
   // find, then replace all across the whole script
-  await page.getByRole('button', { name: 'Localizar' }).click()
+  await menu(app, 'find') // Ctrl+F; the toolbar button may sit in Mais
   await clock('find', async () => {
-    await page.getByPlaceholder('Localizar').fill('Fala número')
+    await page.locator('.findbar input[placeholder="Localizar"]').fill('Fala número')
     await expect(page.locator('.findbar')).toContainText(`de ${SCENES}`, { timeout: 30_000 })
   })
   await clock('replace-all', async () => {
-    await page.getByPlaceholder('Substituir por').fill('Réplica')
-    await page.getByRole('button', { name: 'Substituir tudo' }).click()
-    await page.getByPlaceholder('Localizar').fill('Réplica')
+    await page.locator('.findbar input[placeholder="Substituir por"]').fill('Réplica')
+    await page.locator('.findbar button', { hasText: 'Substituir tudo' }).click()
+    await page.locator('.findbar input[placeholder="Localizar"]').fill('Réplica')
     await expect(page.locator('.findbar')).toContainText(`de ${SCENES}`, { timeout: 60_000 })
   })
 
   // typing with 1800 highlighted matches, then with the find bar closed
-  const editor = page.getByRole('textbox', { name: 'Texto do roteiro' })
+  const editor = page.locator('.ProseMirror')
   await editor.click()
   await clock('type-30-chars-1800-highlights', async () => {
     await page.keyboard.type('abcdefghijklmnopqrstuvwxyz1234', { delay: 0 })
     await expect(editor).toContainText('abcdefghijklmnopqrstuvwxyz1234')
   })
   await page.keyboard.press('Escape')
-  await page.getByRole('button', { name: 'Fechar' }).click({ timeout: 2000 }).catch(() => undefined)
+  // Escape may already have closed the find bar
+  const closeFind = page.locator('.findbar button[aria-label="Fechar busca"]')
+  if ((await closeFind.count()) > 0) await closeFind.click()
+  await expect(page.locator('.findbar')).toHaveCount(0)
   await editor.click()
   await clock('type-30-chars', async () => {
     await page.keyboard.type('ABCDEFGHIJKLMNOPQRSTUVWXYZ5678', { delay: 0 })
     await expect(editor).toContainText('ABCDEFGHIJKLMNOPQRSTUVWXYZ5678')
   })
+  // on a long script the page breaks and the page count follow the text a moment after typing stops: they must catch up
+  await expect
+    .poll(async () => (await page.locator('.page-break').count()) + 1 === Number(/de (\d+)/.exec(await page.locator('.status').innerText())?.[1]), { timeout: 5000 })
+    .toBe(true)
 
   // storyboard: 60 planned frames and 12 real pictures
   await clock('storyboard-60-frames', async () => {
@@ -147,7 +158,7 @@ test('F13 a 300 page script with storyboard, light maps and sheets stays usable'
       expect(r.ok).toBe(true)
     }
   })
-  await page.getByRole('button', { name: 'Storyboard', exact: true }).click()
+  await tab('Storyboard').click()
   const pics: string[] = []
   for (let i = 0; i < 12; i++) {
     const f = join(dir, `quadro-${i}.png`)
@@ -155,7 +166,7 @@ test('F13 a 300 page script with storyboard, light maps and sheets stays usable'
     pics.push(f)
   }
   await clock('storyboard-12-pictures', async () => {
-    await page.getByLabel('Escolher imagens').setInputFiles(pics)
+    await page.locator('input[aria-label="Escolher imagens"]').setInputFiles(pics)
     await expect(page.locator('img').nth(11)).toBeVisible({ timeout: 90_000 })
   })
 
@@ -182,7 +193,7 @@ test('F13 a 300 page script with storyboard, light maps and sheets stays usable'
     await page.locator('button', { hasText: /^Mapa de Luz$/ }).click()
     await expect(page.locator('svg').first()).toBeVisible({ timeout: 30_000 })
   })
-  await page.getByRole('button', { name: 'Roteiro', exact: true }).click()
+  await tab('Roteiro').click()
   await clock('open-lightmap-tab-again', async () => {
     await page.locator('button', { hasText: /^Mapa de Luz$/ }).click()
     await expect(page.locator('svg').first()).toBeVisible({ timeout: 30_000 })
@@ -190,23 +201,23 @@ test('F13 a 300 page script with storyboard, light maps and sheets stays usable'
 
   // character sheets and reports on the big script
   await clock('reports-characters', async () => {
-    await page.getByRole('button', { name: 'Relatórios', exact: true }).click()
-    await page.getByRole('button', { name: 'Fichas de personagem' }).click()
+    await tab('Relatórios').click()
+    await page.locator('.reports nav button', { hasText: 'Fichas de personagem' }).click()
     await expect(page.locator('.chars-list li').nth(NAMES.length - 1)).toBeVisible({ timeout: 30_000 })
     // the typed test text may sit in one cue and make a 13th name; nobody may be missing
     expect(await page.locator('.chars-list li').count()).toBeGreaterThanOrEqual(NAMES.length)
   })
   await clock('reports-stats', async () => {
-    await page.getByRole('button', { name: 'Estatísticas' }).click()
+    await page.locator('.reports nav button', { hasText: 'Estatísticas' }).click()
     await expect(page.locator('table')).toContainText('Páginas', { timeout: 30_000 })
   })
 
   // everything at once into one PDF
-  await page.getByRole('button', { name: 'Roteiro', exact: true }).click()
+  await tab('Roteiro').click()
   const out = join(dir, 'tudo.pdf')
   await dialogs.save(out)
   await clock('pdf-everything', async () => {
-    await page.getByRole('button', { name: 'Exportar PDF' }).click()
+    await page.locator('.toolbar button', { hasText: /^Exportar PDF$/ }).click()
     await expect
       .poll(
         () => {
@@ -224,19 +235,19 @@ test('F13 a 300 page script with storyboard, light maps and sheets stays usable'
   t.pdfPages = (pdf.match(/\/Type\s*\/Page[^s]/g) || []).length
   t.pdfMb = Math.round((statSync(out).size / 1048576) * 10) / 10
 
-  // save as .rotera and open it again
-  const file = join(dir, 'grande.rotera')
+  // save as .rottera and open it again
+  const file = join(dir, 'grande.rottera')
   await dialogs.save(file)
   await clock('save-as', async () => {
-    await page.getByRole('button', { name: 'Salvar como…' }).click()
+    await page.locator('.toolbar button[aria-label="Salvar como…"]').click()
     await expect(page.locator('.status')).toContainText('Salvo', { timeout: 60_000 })
   })
   t.fileMb = Math.round((statSync(file).size / 1048576) * 10) / 10
-  await page.getByRole('button', { name: 'Início' }).click()
+  await page.locator('.toolbar button', { hasText: /^Início$/ }).click()
   await dialogs.open(file)
   await clock('reopen', async () => {
-    await page.getByRole('button', { name: 'Abrir…' }).click()
-    await expect(page.getByRole('complementary', { name: 'Navegador de cenas' })).toContainText(`Cenas (${SCENES})`, { timeout: 90_000 })
+    await page.locator('.home-actions button', { hasText: 'Abrir…' }).click()
+    await expect(page.locator('.nav')).toContainText(`Cenas (${SCENES})`, { timeout: 90_000 })
   })
 
   t.heapStartMb = heap0
@@ -250,8 +261,9 @@ test('F13 a 300 page script with storyboard, light maps and sheets stays usable'
   expect(t['navigator-move-scene']).toBeLessThan(5_000)
   expect(t.find).toBeLessThan(5_000)
   expect(t['replace-all']).toBeLessThan(20_000)
-  expect(t['type-30-chars']).toBeLessThan(6_000)
-  expect(t['type-30-chars-1800-highlights']).toBeLessThan(15_000)
+  // about 2.5 s on the reference machine since long scripts paginate when typing stops (it was 5.4 s)
+  expect(t['type-30-chars']).toBeLessThan(4_500)
+  expect(t['type-30-chars-1800-highlights']).toBeLessThan(6_000)
   expect(t['open-lightmap-tab']).toBeLessThan(5_000)
   expect(t['reports-characters']).toBeLessThan(5_000)
   expect(t['pdf-everything']).toBeLessThan(180_000)

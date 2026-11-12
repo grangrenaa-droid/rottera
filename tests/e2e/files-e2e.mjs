@@ -132,7 +132,9 @@ const setNext = (open, save) =>
   main.js(`globalThis.__next = { open: ${JSON.stringify(open)}, save: ${JSON.stringify(save)} }`)
 
 const clickText = (t) =>
-  page.js(`(() => { const b = [...document.querySelectorAll('button')].find(b => b.textContent.trim().startsWith(${JSON.stringify(t)})); if (!b) return false; b.click(); return true })()`)
+  (async () =>
+    (await page.js(`(() => { const name = (b) => b.textContent.trim() || b.getAttribute('aria-label') || ''; const b = [...document.querySelectorAll('button')].find(b => name(b).startsWith(${JSON.stringify(t)})); if (!b) return false; b.click(); return true })()`)) ||
+    ((await page.js(`(() => { const m = [...document.querySelectorAll('.toolbar button')].find(b => b.textContent.trim().startsWith('Mais')); if (!m) return false; m.click(); return true })()`)) && (await new Promise((r) => setTimeout(r, 150)), await page.js(`(() => { const name = (b) => b.textContent.trim() || b.getAttribute('aria-label') || ''; const b = [...document.querySelectorAll('button')].find(b => name(b).startsWith(${JSON.stringify(t)})); if (!b) return false; b.click(); return true })()`))))()
 const domBlocks = () =>
   page.js(`[...document.querySelectorAll('.sheet-content > p')].map(p => ({k: p.dataset.kind, t: p.textContent}))`)
 const closePop = () => page.js("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}))")
@@ -185,7 +187,9 @@ if (existsSync(p('saida.pdf'))) {
 // ---- export FDX and Fountain from the "Mais" menu
 await openPop('Mais')
 await setNext(null, p('saida.fdx'))
-await clickText('Exportar FDX')
+await clickText('Exportar…')
+await sleep(200)
+await clickText('FDX')
 await sleep(800)
 check('FDX written', existsSync(p('saida.fdx')))
 if (existsSync(p('saida.fdx'))) {
@@ -194,7 +198,9 @@ if (existsSync(p('saida.fdx'))) {
 }
 await openPop('Mais')
 await setNext(null, p('saida.fountain'))
-await clickText('Exportar Fountain')
+await clickText('Exportar…')
+await sleep(200)
+await clickText('Fountain')
 await sleep(800)
 check('Fountain written', existsSync(p('saida.fountain')))
 if (existsSync(p('saida.fountain'))) {

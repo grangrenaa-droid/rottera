@@ -24,7 +24,7 @@ ONDE FICA O SEU TEXTO
 
 PRIVACIDADE
 - O programa não envia nada para ninguém e não tem conta.
-- A conexão com o Claude é opcional, fica desligada até você querer, e só funciona neste computador.
+- A conexão com uma IA (Claude, Codex, Gemini e outras) é opcional, fica desligada até você querer, e só funciona neste computador.
 
 SE ALGO DER ERRADO
 - Menu Ajuda, "Copiar diagnóstico": mostra um texto com versão e erros recentes. Ele não leva o

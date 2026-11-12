@@ -1,15 +1,31 @@
 import type { Block, Script } from './types'
+import type { ReportSection } from './reportHtml'
 import { LABELS, KINDS } from './elements'
 import { paginate } from './paginate'
 import { parseHeading } from './smarttype'
 import { sceneNumbers } from './scenes'
 import { revisionLabel } from './revisions'
+import { electricLoad, gearList } from './lightmap'
+import { breakdownReport, elementsReport, emptyProduction, intExt, sceneInfo, scheduleReport } from './production'
 
 export interface Report {
   id: string
   title: string
   columns: string[]
+  /** The flat table: what the screen and the CSV show. */
   rows: (string | number)[][]
+  /** How the PDF prints it when that differs: in groups with headings (a shooting plan, day by day). */
+  printed?: { columns: string[]; sections: ReportSection[] }
+}
+
+/** What goes to the PDF: the groups when the report has them, the flat table otherwise. */
+export function printable(r: Pick<Report, 'title' | 'columns' | 'rows' | 'printed'>): {
+  title: string
+  columns: string[]
+  rows: (string | number)[][]
+  sections?: ReportSection[]
+} {
+  return r.printed ? { title: r.title, columns: r.printed.columns, rows: [], sections: r.printed.sections } : { title: r.title, columns: r.columns, rows: r.rows }
 }
 
 const words = (t: string): number => (t.trim() ? t.trim().split(/\s+/).length : 0)
@@ -24,14 +40,6 @@ function pagesLabel(set: Set<number>): string {
     i = j + 1
   }
   return out.join(', ')
-}
-
-function intExt(intro: string): string {
-  const v = intro.toUpperCase()
-  if (v.includes('/')) return 'INT./EXT.'
-  if (v.startsWith('INT') || v === 'I') return 'INT.'
-  if (v.startsWith('EXT')) return 'EXT.'
-  return v || '—'
 }
 
 export function buildReports(script: Script): Report[] {
@@ -83,6 +91,14 @@ export function buildReports(script: Script): Report[] {
       page(s.index),
       blocks.slice(s.index + 1, s.end).reduce((n, b) => n + words(b.text), 0)
     ])
+  }
+
+  // Step outline: the scenes and what happens in each
+  const r1b: Report = {
+    id: 'escaleta',
+    title: 'Escaleta',
+    columns: ['Nº', 'Cabeçalho', 'Página', 'Sinopse'],
+    rows: scenes.map((s) => [s.number, s.heading, page(s.index), blocks[s.index].syn?.trim() || '—'])
   }
 
   // Characters
@@ -222,7 +238,38 @@ export function buildReports(script: Script): Report[] {
     ]
   }
 
-  return [r1, r2, r3, r4, r5, r6, r7, r8]
+  // production: the breakdown and the shooting plan (Filmagem tab)
+  const prod = script.production ?? emptyProduction()
+  const info = sceneInfo(script, pag)
+  // camera: the shot list, from the storyboard frames
+  const frames = script.storyboard?.frames ?? []
+  const shots: Report = {
+    id: 'planos',
+    title: 'Lista de planos',
+    columns: ['Cena', 'Quadro', 'Plano', 'Ângulo', 'Movimento', 'Lente', 'Descrição'],
+    rows: frames.map((fr, i) => [fr.scene || '—', i + 1, fr.shot || '—', fr.angle || '—', fr.move || '—', fr.lens ? `${fr.lens} mm` : '—', fr.caption.trim() || '—'])
+  }
+
+  // light: what to rent and the electrical load, from every light map
+  const gear = gearList(script.lightMaps ?? [])
+  const totalW = gear.reduce((n, g) => n + g.watts * g.count, 0)
+  const load = electricLoad(totalW)
+  const fmt = (n: number): string => n.toLocaleString('pt-BR', { maximumFractionDigits: 1 })
+  const equipment: Report = {
+    id: 'equipamento',
+    title: 'Equipamento de luz',
+    columns: ['Aparelho', 'Potência (W)', 'Quantidade', 'Total (W)', 'Mapas'],
+    rows: gear.length
+      ? [
+          ...gear.map((g) => [g.name, g.watts, g.count, g.watts * g.count, g.maps.join(', ')]),
+          ['Total', '', gear.reduce((n, g) => n + g.count, 0), totalW, ''],
+          ['Corrente em 127 V', '', '', `${fmt(load.a127)} A`, ''],
+          ['Corrente em 220 V', '', '', `${fmt(load.a220)} A`, '']
+        ]
+      : []
+  }
+
+  return [r1, r2, r3, r4, r5, r6, r7, r8, r1b, shots, equipment, breakdownReport(info, prod), elementsReport(info, prod), scheduleReport(info, prod)]
 }
 
 export function reportToCsv(r: Report): string {

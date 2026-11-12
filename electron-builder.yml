@@ -40,3 +40,15 @@ linux:
   icon: build/icon.png
   category: Office
   executableName: rottera
+# Microsoft Store package (npm run dist:store). The images come from build/appx (scripts/make-appx-assets.py).
+# identityName, publisher and publisherDisplayName come from Partner Center: scripts/pack-store.mjs fills them in.
+appx:
+  applicationId: Rottera
+  displayName: Rottera
+  backgroundColor: transparent
+  languages:
+    - pt-BR
+  minVersion: 10.0.17763.0
+  maxVersionTested: 10.0.26100.0
+  artifactName: ${productName}-${version}-loja.${ext}
+appxManifestCreated: scripts/appx-manifest.cjs

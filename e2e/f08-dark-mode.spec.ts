@@ -1,4 +1,4 @@
-import { axeViolations, expect, newScript, test } from './fixtures'
+import { axeViolations, expect, newScript, setTheme, test } from './fixtures'
 import type { Page } from '@playwright/test'
 
 test.afterEach(({ errors }) => {
@@ -13,46 +13,62 @@ const luminance = (rgb: string): number => {
 }
 
 test.describe('F08 dark mode', () => {
-  test('F08-H1 the theme selector is on the home screen and in the editor', async ({ page }) => {
-    await expect(page.getByLabel('Tema')).toBeVisible()
-    await newScript(page)
-    await expect(page.getByLabel('Tema')).toBeVisible()
+  test('F08-H1 the sun and moon button is on the home screen and flips light and dark', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'light' })
+    const toggle = page.locator('.theme-toggle')
+    await expect(toggle).toBeVisible()
+    await toggle.click()
+    await expect.poll(async () => luminance(await bg(page))).toBeLessThan(0.3)
+    await expect(toggle).toHaveAccessibleName('Mudar para tema claro')
+    await toggle.click()
+    await expect.poll(async () => luminance(await bg(page))).toBeGreaterThan(0.8)
   })
 
-  test('F08-H2 Noite and Meia-noite make the whole window dark, Claro makes it light', async ({ page }) => {
+  test('F08-H1b in the editor the theme is on the toolbar, or in Mais when the toolbar is full', async ({ page }) => {
+    await newScript(page)
+    if ((await page.locator('.toolbar .theme-toggle').count()) === 0) {
+      await page.getByRole('button', { name: 'Mais' }).click()
+      await page.getByLabel('Tema').selectOption('midnight')
+    } else {
+      await page.locator('.toolbar .theme-toggle').click()
+    }
+    await expect.poll(async () => luminance(await bg(page))).toBeLessThan(0.3)
+  })
+
+  test('F08-H2 Noite and Meia-noite make the whole window dark, Claro makes it light', async ({ app, page }) => {
     await newScript(page)
     await page.emulateMedia({ colorScheme: 'light' })
-    await page.getByLabel('Tema').selectOption('night')
+    await setTheme(app, page, 'night')
     expect(luminance(await bg(page))).toBeLessThan(0.3)
     expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe('dark')
     // the script page itself is dark too
     const paper = await page.evaluate(() => getComputedStyle(document.querySelector('.sheet') as Element).backgroundColor)
     expect(luminance(paper)).toBeLessThan(0.3)
-    await page.getByLabel('Tema').selectOption('midnight')
+    await setTheme(app, page, 'midnight')
     expect(luminance(await bg(page))).toBeLessThan(0.15)
-    await page.getByLabel('Tema').selectOption('light')
+    await setTheme(app, page, 'light')
     expect(luminance(await bg(page))).toBeGreaterThan(0.8)
   })
 
-  test('F08-H3 Automático follows the Windows setting, Claro does not', async ({ page }) => {
+  test('F08-H3 Automático follows the Windows setting, Claro does not', async ({ app, page }) => {
     await page.emulateMedia({ colorScheme: 'dark' })
-    await page.getByLabel('Tema').selectOption('auto')
+    await setTheme(app, page, 'auto')
     expect(luminance(await bg(page))).toBeLessThan(0.3)
-    await page.getByLabel('Tema').selectOption('light')
+    await setTheme(app, page, 'light')
     expect(luminance(await bg(page))).toBeGreaterThan(0.8)
     await page.emulateMedia({ colorScheme: 'light' })
-    await page.getByLabel('Tema').selectOption('auto')
+    await setTheme(app, page, 'auto')
     expect(luminance(await bg(page))).toBeGreaterThan(0.8)
   })
 
-  test('F08-E1 the choice survives a reload', async ({ page }) => {
-    await page.getByLabel('Tema').selectOption('midnight')
+  test('F08-E1 the choice survives a reload', async ({ app, page }) => {
+    await setTheme(app, page, 'midnight')
     await page.reload()
-    await expect(page.getByLabel('Tema')).toHaveValue('midnight')
+    await expect.poll(() => page.evaluate(() => document.documentElement.getAttribute('data-theme'))).toBe('midnight')
     expect(luminance(await bg(page))).toBeLessThan(0.15)
   })
 
-  test('F08-E2 every panel stays readable in the dark themes (contrast scan)', async ({ page }) => {
+  test('F08-E2 every panel stays readable in the dark themes (contrast scan)', async ({ app, page }) => {
     await newScript(page)
     page.on('dialog', (d) => void d.accept())
     const found: string[] = []
@@ -61,8 +77,8 @@ test.describe('F08 dark mode', () => {
       Storyboard: 'Quadro vazio',
       'Mapa de Luz': 'Criar o primeiro mapa'
     }
-    for (const theme of ['night', 'midnight']) {
-      await page.getByLabel('Tema').selectOption(theme)
+    for (const theme of ['night', 'midnight'] as const) {
+      await setTheme(app, page, theme)
       for (const tab of ['Roteiro', 'Beat Board', 'Storyboard', 'Mapa de Luz', 'Relatórios']) {
         await page.getByRole('button', { name: tab, exact: true }).click()
         const extra = fill[tab]
@@ -74,9 +90,9 @@ test.describe('F08 dark mode', () => {
     expect(found).toEqual([])
   })
 
-  test('F08-E3 text is never dark on dark: no element has the same text and background colour', async ({ page }) => {
+  test('F08-E3 text is never dark on dark: no element has the same text and background colour', async ({ app, page }) => {
     await newScript(page)
-    await page.getByLabel('Tema').selectOption('night')
+    await setTheme(app, page, 'night')
     await page.waitForTimeout(400) // buttons fade between themes
     const bad = await page.evaluate(() => {
       const out: string[] = []

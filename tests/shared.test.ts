@@ -84,7 +84,7 @@ describe('pagination', () => {
     expect(pages[0][pages[0].length - 1].kind).not.toBe('scene_heading')
     expect(pages[1].some((l) => l.kind === 'scene_heading')).toBe(true)
   })
-  it('splits long dialogue with MORE and CONTD', () => {
+  it('splits long dialogue with CONTINUA and CONT.', () => {
     // 40 lines of action, then a long speech (18 lines) that must split
     const blocks: Block[] = [
       act(7 * 40),
@@ -94,9 +94,15 @@ describe('pagination', () => {
     const { pages } = paginate(blocks)
     expect(pages.length).toBe(2)
     const texts0 = pages[0].map((l) => l.text)
-    expect(texts0[texts0.length - 1]).toBe('(MORE)')
-    expect(pages[1][0].text).toBe("ANA (CONT'D)")
+    expect(texts0[texts0.length - 1]).toBe('(CONTINUA)')
+    expect(pages[1][0].text).toBe('ANA (CONT.)')
     for (const p of pages) expect(p.length).toBeLessThanOrEqual(PAGE_LINES)
+  })
+  it('does not mark twice a cue the writer already marked as continuing', () => {
+    for (const cue of ['ANA (CONT.)', "ANA (CONT'D)"]) {
+      const { pages } = paginate([act(7 * 40), { kind: 'character', text: cue }, { kind: 'dialogue', text: Array(120).fill('fala').join(' ') }])
+      expect(pages[1][0].text).toBe(cue)
+    }
   })
 })
 

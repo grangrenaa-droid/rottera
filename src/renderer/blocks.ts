@@ -5,7 +5,7 @@ import type { Block, Kind } from '../shared/types'
 export function blockToJson(b: Block): JSONContent {
   return {
     type: 'block',
-    attrs: { kind: b.kind, dual: b.dual === true, rev: b.rev ?? null, sn: b.sn ?? null, bid: b.kind === 'scene_heading' ? b.bid ?? null : null },
+    attrs: { kind: b.kind, dual: b.dual === true, rev: b.rev ?? null, sn: b.sn ?? null, bid: b.kind === 'scene_heading' ? b.bid ?? null : null, nid: b.nid ?? null, syn: b.kind === 'scene_heading' ? b.syn ?? null : null },
     content: b.text ? [{ type: 'text', text: b.text }] : undefined
   }
 }
@@ -20,6 +20,8 @@ export function nodeToBlock(node: PMNode): Block {
   if (typeof node.attrs.rev === 'string') b.rev = node.attrs.rev
   if (typeof node.attrs.sn === 'string') b.sn = node.attrs.sn
   if (node.attrs.kind === 'scene_heading' && typeof node.attrs.bid === 'string') b.bid = node.attrs.bid
+  if (typeof node.attrs.nid === 'string') b.nid = node.attrs.nid
+  if (node.attrs.kind === 'scene_heading' && typeof node.attrs.syn === 'string' && node.attrs.syn) b.syn = node.attrs.syn
   return b
 }
 

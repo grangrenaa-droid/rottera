@@ -66,6 +66,7 @@ const cdp = (method, params = {}) =>
   })
 const js = async (expr) => {
   const r = await cdp('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true })
+  if (!r.result) throw new Error('CDP: ' + JSON.stringify(r.error))
   if (r.result.exceptionDetails) throw new Error(JSON.stringify(r.result.exceptionDetails).slice(0, 400))
   return r.result.result.value
 }
@@ -75,7 +76,9 @@ const shot = async (name) => {
   writeFileSync(`${shotDir}/${name}.png`, Buffer.from(r.result.data, 'base64'))
 }
 const clickText = (t) =>
-  js(`(() => { const b = [...document.querySelectorAll('button')].find(b => b.textContent.trim().startsWith(${JSON.stringify(t)})); if (!b) return false; b.click(); return true })()`)
+  (async () =>
+    (await js(`(() => { const name = (b) => b.textContent.trim() || b.getAttribute('aria-label') || ''; const b = [...document.querySelectorAll('button')].find(b => name(b).startsWith(${JSON.stringify(t)})); if (!b) return false; b.click(); return true })()`)) ||
+    ((await js(`(() => { const m = [...document.querySelectorAll('.toolbar button')].find(b => b.textContent.trim().startsWith('Mais')); if (!m) return false; m.click(); return true })()`)) && (await new Promise((r) => setTimeout(r, 150)), await js(`(() => { const name = (b) => b.textContent.trim() || b.getAttribute('aria-label') || ''; const b = [...document.querySelectorAll('button')].find(b => name(b).startsWith(${JSON.stringify(t)})); if (!b) return false; b.click(); return true })()`))))()
 
 const closePop = () => js("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}))")
 const openPop = async (label) => {
@@ -252,7 +255,57 @@ check(
 const rp = await tool('get_reports', { id: 'personagens' })
 check('report personagens', rp.rows.some((r) => r[0] === 'MARINA'), JSON.stringify(rp).slice(0, 200))
 const all = await tool('get_reports')
-check('eight reports', all.length === 8, all.length)
+check('fourteen reports, the last three from Filmagem', all.length === 14 && all.at(-1).id === 'plano', all.length)
+
+// notes: the writer leaves a note, the AI reads it, rewrites the line and marks the note resolved
+{
+  check('mcp lists the notes tools', ['get_notes', 'add_note', 'update_note', 'delete_note'].every((n) => list.result.tools.some((t) => t.name === n)))
+  const before = await tool('get_script')
+  const target = before.blocks.findIndex((b) => b.kind === 'dialogue')
+  const added = await tool('add_note', { block: target, text: 'Mais curta.', color: 'pink' })
+  check('add_note pins a note to a line', typeof added.id === 'string' && added.block === target, JSON.stringify(added))
+  const open = await tool('get_notes', { open_only: true })
+  check(
+    'get_notes shows the line and what the note asks',
+    open.length === 1 && open[0].meaning === 'Reescrever' && open[0].line.text === before.blocks[target].text,
+    JSON.stringify(open)
+  )
+  await tool('update_block', { index: target, text: 'Curta.' })
+  const solved = await tool('update_note', { id: added.id, color: 'green', text: 'Mais curta.\n— IA: reduzida para uma palavra.' })
+  check('update_note marks it resolved', solved.meaning === 'Resolvido', JSON.stringify(solved))
+  check('nothing is left open', (await tool('get_notes', { open_only: true })).length === 0)
+  check('the edited line keeps its note', (await tool('get_notes'))[0].line.text === 'Curta.')
+  const badNote = await tool('update_note', { id: 'nao-existe', color: 'green' })
+  check('update_note refuses an unknown id', typeof badNote.error === 'string', JSON.stringify(badNote))
+}
+
+// cinematography: a light with its technical sheet, a camera with a lens, the gear list and a shot
+{
+  const m = await tool('create_lightmap', { name: 'Foto', width: 8, height: 6 })
+  const key = await tool('add_light_item', { map: m.index, type: 'fresnel', x: 2, y: 2, role: 'key', watts: 2000, gel: '1/2 CTO', height: 2.4 })
+  await tool('add_light_item', { map: m.index, type: 'camera', x: 4, y: 5, lens: 50, sensor: 'ff', shot: 'Close' })
+  const read = (await tool('get_lightmaps'))[m.index]
+  const light = read.items.find((i) => i.id === key.id)
+  check('a light keeps its technical sheet and number', light.watts === 2000 && light.role === 'key' && light.gel === '1/2 CTO' && light.number === 1, JSON.stringify(light))
+  check('a camera with a lens has its angle', read.items.some((i) => i.type === 'camera' && i.lens === 50 && i.summary.includes('50 mm (Full Frame, 40°)')), JSON.stringify(read.items))
+  check('the map has its electrical load', read.load.watts === 2000 && read.load.a127 === 15.7, JSON.stringify(read.load))
+  const up = await tool('update_light_item', { map: m.index, item: key.id, gel: null, kelvin: 5600 })
+  check('update_light_item changes and clears the sheet', !/CTO/.test(up.summary) && /5600 K/.test(up.summary), JSON.stringify(up))
+  const gear = await tool('get_lighting_gear')
+  check('get_lighting_gear lists the lights to rent', gear.gear.some((g) => g.type === 'fresnel' && g.watts === 2000), JSON.stringify(gear))
+  const fr = await tool('add_frame', { caption: 'Marina na janela', shot: 'Close', angle: 'Plongée', lens: 85 })
+  const sb = await tool('get_storyboard')
+  check('a frame keeps its shot', sb.frames[fr.index].shot === 'Close' && sb.frames[fr.index].lens === 85, JSON.stringify(sb.frames[fr.index]))
+}
+
+// synopsis: the AI writes one and it shows under the heading
+{
+  const o = await tool('get_outline')
+  const r = await tool('set_synopsis', { scene: o[0].number, text: 'Resumo da cena.' })
+  check('set_synopsis writes it', r.synopsis === 'Resumo da cena.', JSON.stringify(r))
+  check('the synopsis shows under the heading', (await js(`document.querySelector('.syn-line')?.textContent`)) === 'Resumo da cena.')
+  check('get_outline reads it back', (await tool('get_outline'))[0].synopsis === 'Resumo da cena.')
+}
 
 // revision mode on, then an edit gets a revision mark
 await openPop('Produção')
@@ -309,7 +362,7 @@ await sleep(200)
 
 // connect dialog
 await openPop('Mais')
-await clickText('Conectar ao Claude')
+await clickText('Conectar a uma IA')
 await sleep(400)
 const dlg = await js(`document.querySelector('dialog')?.innerText ?? ''`)
 check('connect dialog shows commands', /claude mcp add rottera/.test(dlg), dlg.slice(0, 200))

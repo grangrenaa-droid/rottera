@@ -60,7 +60,9 @@ async function layoutProblems(page: Page): Promise<Problem[]> {
     // controls that sit side by side must not overlap
     const bars = document.querySelectorAll('.toolbar, .findbar, .board-bar, .status')
     for (const bar of bars) {
-      const kids = [...bar.children].filter(visible)
+      // the toolbar keeps its controls in two groups; compare the controls themselves, not the invisible reserve
+      const parts = bar.classList.contains('toolbar') ? bar.querySelectorAll(':scope > .toolbar-main > *, :scope > .toolbar-end') : bar.children
+      const kids = [...parts].filter(visible)
       for (let i = 0; i < kids.length; i++) {
         for (let j = i + 1; j < kids.length; j++) {
           const a = kids[i].getBoundingClientRect()
@@ -170,7 +172,7 @@ test.describe('F11 narrow windows and display scaling', () => {
       await newScript(page)
       await setView(app, page, s.w, s.h, s.zoom)
       const found: string[] = []
-      for (const item of ['Conectar ao Claude…', 'Gerenciar SmartType…', 'Página de título…']) {
+      for (const item of ['Conectar a uma IA…', 'Gerenciar SmartType…', 'Página de título…']) {
         await page.getByRole('button', { name: 'Mais' }).click()
         await page.getByRole('button', { name: item }).click()
         const dlg = page.getByRole('dialog')
@@ -194,6 +196,60 @@ test.describe('F11 narrow windows and display scaling', () => {
         await expect(page.getByRole('dialog')).toHaveCount(0)
       }
       expect(found).toEqual([])
+    })
+
+    test(`F11-L5 Salvar stays on the first row of the toolbar at ${s.label} (${s.w}x${s.h})`, async ({ app, page }) => {
+      await newScript(page)
+      await setView(app, page, s.w, s.h, s.zoom)
+      const box = async (name: string) => {
+        const b = page.getByRole('toolbar').getByRole('button', { name, exact: true })
+        return (await b.count()) === 0 ? null : b.first().boundingBox()
+      }
+      const home = await box('Início')
+      expect(home).not.toBeNull()
+      expect(await box('Salvar como…'), 'Salvar como… on the toolbar').not.toBeNull()
+      // in narrow windows Exportar PDF moves into Mais; when it is on the toolbar it sits by Salvar
+      for (const name of ['Salvar como…', 'Exportar PDF']) {
+        const b = await box(name)
+        if (!b || !home) continue
+        // same row as Início: their vertical spans overlap
+        expect(b.y, name).toBeLessThan(home.y + home.height)
+        expect(b.y + b.height, name).toBeGreaterThan(home.y)
+      }
+    })
+  }
+
+  // window widths in CSS pixels: 1920 at 100% and 110%, 1920 at 125%, 1366, the default window, and a narrow one
+  for (const w of [1920, 1745, 1536, 1366, 1280, 1120]) {
+    test(`F11-L6 the toolbar keeps to one row at ${w}px, and what does not fit is in Mais`, async ({ app, page }) => {
+      await newScript(page)
+      await setView(app, page, w, 800, 1)
+      const rows = await page.evaluate(() => {
+        const tops = [...document.querySelectorAll('.toolbar-main > *, .toolbar-end > *')]
+          .map((e) => e.getBoundingClientRect())
+          .filter((r) => r.width > 2)
+          .map((r) => Math.round(r.top + r.height / 2))
+        return Math.max(...tops) - Math.min(...tops)
+      })
+      expect(rows, 'controls on different rows').toBeLessThan(12)
+      const bar = page.getByRole('toolbar')
+      await expect(bar.getByRole('button', { name: 'Salvar como…', exact: true })).toBeVisible()
+      // each foldable action is either on the bar or in Mais, never lost
+      const onBar = { Navegador: 'Navegador', Localizar: 'Localizar', 'Diálogo duplo': 'Diálogo duplo', Visualizar: 'Visualizar' }
+      const inMais = { Navegador: 'navegador de cenas', Localizar: 'Localizar e substituir…', 'Diálogo duplo': 'Diálogo duplo (Ctrl+D)', Visualizar: 'Visualizar impressão' }
+      const shown: Record<string, boolean> = {}
+      for (const [k, name] of Object.entries(onBar)) shown[k] = (await bar.getByRole('button', { name, exact: true }).count()) > 0
+      await page.getByRole('button', { name: 'Mais' }).click()
+      const panel = page.locator('.popover-panel')
+      for (const [k, name] of Object.entries(inMais)) {
+        const there = (await panel.getByRole('button', { name }).count()) > 0
+        expect(there, `${k}: on the bar ${shown[k]}, in Mais ${there}`).toBe(!shown[k])
+      }
+      // every export, PDF included, is always one click away in Mais
+      await expect(panel.getByRole('button', { name: 'Exportar…', exact: true })).toBeVisible()
+      shown['Exportar PDF'] = (await bar.getByRole('button', { name: 'Exportar PDF', exact: true }).count()) > 0
+      if (w >= 1920) expect(Object.values(shown).every(Boolean), 'nothing folded on a wide screen').toBe(true)
+      await page.keyboard.press('Escape')
     })
   }
 })

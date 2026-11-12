@@ -1,8 +1,8 @@
 {
   "name": "rottera",
   "productName": "Rottera",
-  "version": "0.1.1",
-  "description": "Desktop screenwriting app (working name)",
+  "version": "0.2.0",
+  "description": "Editor de roteiros para cinema e TV",
   "main": "out/main/index.js",
   "author": "Rottera",
   "scripts": {
@@ -15,6 +15,7 @@
     "dist": "electron-vite build && electron-builder --win nsis",
     "dist:portable": "node scripts/pack-portable.mjs",
     "dist:linux": "node scripts/pack-linux.mjs",
+    "dist:store": "node scripts/pack-store.mjs",
     "test:e2e:pw": "electron-vite build && playwright test"
   },
   "dependencies": {

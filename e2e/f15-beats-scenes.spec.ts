@@ -99,7 +99,7 @@ test.describe('F15 board beats and script scenes stay linked', () => {
     await rpc(userData, 'add_beat', { lane: 'A', title: 'Dois', body: '' })
     await rpc(userData, 'send_beats')
     const dir = mkdtempSync(join(tmpdir(), 'rotera-f15-'))
-    const file = join(dir, 'ligado.rotera')
+    const file = join(dir, 'ligado.rottera')
     await dialogs.save(file)
     await page.getByRole('button', { name: 'Salvar como…' }).click()
     await expect(page.locator('.status')).toContainText('Salvo')

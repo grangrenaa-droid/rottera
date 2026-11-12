@@ -8,9 +8,9 @@ import {
 } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import type { Node as PMNode } from '@tiptap/pm/model'
-import type { Kind, Paper } from '../shared/types'
+import type { Kind, NoteColor, Paper } from '../shared/types'
 import { KINDS, cycleKind, enterResult, tabResult } from '../shared/elements'
-import { paginate, wrap, SPEC } from '../shared/paginate'
+import { LONG_SCRIPT_BLOCKS, LONG_SCRIPT_DELAY, paginate, wrap, SPEC } from '../shared/paginate'
 import { sceneNumbers } from '../shared/scenes'
 import { UPPER } from '../shared/elements'
 import { docNodeToBlocks } from './blocks'
@@ -26,7 +26,9 @@ export const BlockNode = Node.create({
       dual: { default: false },
       rev: { default: null },
       sn: { default: null },
-      bid: { default: null }
+      bid: { default: null },
+      nid: { default: null },
+      syn: { default: null }
     }
   },
   parseHTML() {
@@ -59,6 +61,12 @@ export interface ViewState {
   query: string
   caseSensitive: boolean
   current: number
+  /** Lines with notes (by anchor) and the colour of their first note. */
+  notes: Record<string, NoteColor>
+  /** Show each scene's synopsis under its heading. */
+  showSynopsis: boolean
+  /** Block being read aloud (table read), highlighted. */
+  reading: number | null
 }
 
 export const viewKey = new PluginKey<ViewState>('roteraView')
@@ -71,7 +79,10 @@ const DEFAULT_VIEW: ViewState = {
   revColor: 'azul',
   query: '',
   caseSensitive: false,
-  current: 0
+  current: 0,
+  notes: {},
+  showSynopsis: true,
+  reading: null
 }
 
 export interface Range {
@@ -102,6 +113,21 @@ function pageBreakWidget(page: number): HTMLElement {
   el.setAttribute('contenteditable', 'false')
   el.setAttribute('data-page', String(page))
   el.setAttribute('aria-hidden', 'true')
+  return el
+}
+
+/** The synopsis under a scene heading. Clicking it asks the app to edit it (in the scene navigator). */
+function synopsisWidget(text: string, block: number): HTMLElement {
+  const el = document.createElement('span')
+  el.className = 'syn-line'
+  el.setAttribute('contenteditable', 'false')
+  el.setAttribute('data-block', String(block))
+  el.title = 'Sinopse da cena (não sai no PDF). Clique para editar.'
+  el.textContent = text
+  el.addEventListener('mousedown', (e) => {
+    e.preventDefault()
+    window.dispatchEvent(new CustomEvent('rottera:edit-synopsis', { detail: block }))
+  })
   return el
 }
 
@@ -145,6 +171,30 @@ function buildDecorations(doc: PMNode, vs: ViewState): DecorationSet {
     })
   }
 
+  // Lines with notes: a tint in the colour of the note
+  if (Object.keys(vs.notes).length > 0) {
+    blocks.forEach((b, i) => {
+      const color = b.nid ? vs.notes[b.nid] : undefined
+      if (color) decos.push(Decoration.node(starts[i], starts[i] + sizes[i], { 'data-note': color }))
+    })
+  }
+
+  // Synopses: a line under the heading, outside the text (not printed, not counted as a line of the page)
+  if (vs.showSynopsis) {
+    blocks.forEach((b, i) => {
+      if (b.kind !== 'scene_heading' || !b.syn) return
+      const syn = b.syn
+      decos.push(
+        Decoration.widget(starts[i] + sizes[i] - 1, () => synopsisWidget(syn, i), { side: 1, ignoreSelection: true, key: `syn-${i}-${syn}` })
+      )
+    })
+  }
+
+  // The line being read aloud
+  if (vs.reading !== null && vs.reading < starts.length) {
+    decos.push(Decoration.node(starts[vs.reading], starts[vs.reading] + sizes[vs.reading], { class: 'reading' }))
+  }
+
   // Search hits
   if (vs.query) {
     findRanges(doc, vs.query, vs.caseSensitive).forEach((r, i) => {
@@ -169,6 +219,52 @@ export function setBlockAttr(tr: Transaction, pos: number, attrs: Record<string,
   if (node) tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...attrs })
 }
 
+/**
+ * The decorations (page breaks, scene numbers, notes, synopses, search hits...) of the whole script.
+ * Building them paginates the script, so they are built once per change of the text or of the view settings and kept;
+ * a selection change, or React handing the editor its options again, reuses them.
+ */
+interface DecoState {
+  set: DecorationSet
+  /** The set was only shifted along with an edit; it is rebuilt when typing stops. */
+  stale: boolean
+}
+const decoKey = new PluginKey<DecoState>('roteraDecorations')
+const build = (state: EditorState): DecorationSet => buildDecorations(state.doc, viewKey.getState(state) ?? DEFAULT_VIEW)
+const DecoPlugin = new Plugin<DecoState>({
+  key: decoKey,
+  state: {
+    init: (_config, state) => ({ set: build(state), stale: false }),
+    apply: (tr, old, _oldState, newState) => {
+      // new view settings (paper, numbers, search, notes...) or the rebuild asked for below: build now
+      if (tr.getMeta(viewKey) || tr.getMeta(decoKey)) return { set: build(newState), stale: false }
+      if (!tr.docChanged) return old
+      // a long script: shift what is there along with the edit, and paginate again when typing stops
+      if (newState.doc.childCount >= LONG_SCRIPT_BLOCKS) return { set: old.set.map(tr.mapping, tr.doc), stale: true }
+      return { set: build(newState), stale: false }
+    }
+  },
+  props: {
+    decorations: (state) => decoKey.getState(state)?.set ?? DecorationSet.empty
+  },
+  view: () => {
+    let timer: number | null = null
+    return {
+      update: (view) => {
+        if (!decoKey.getState(view.state)?.stale) return
+        if (timer !== null) window.clearTimeout(timer)
+        timer = window.setTimeout(() => {
+          timer = null
+          if (decoKey.getState(view.state)?.stale) view.dispatch(view.state.tr.setMeta(decoKey, true).setMeta('addToHistory', false))
+        }, LONG_SCRIPT_DELAY)
+      },
+      destroy: () => {
+        if (timer !== null) window.clearTimeout(timer)
+      }
+    }
+  }
+})
+
 const ViewPlugin = Extension.create({
   name: 'roteraView',
   addProseMirrorPlugins() {
@@ -180,12 +276,6 @@ const ViewPlugin = Extension.create({
           apply: (tr, value) => {
             const meta = tr.getMeta(viewKey) as Partial<ViewState> | undefined
             return meta ? { ...value, ...meta } : value
-          }
-        },
-        props: {
-          decorations(state) {
-            const vs = viewKey.getState(state)
-            return vs ? buildDecorations(state.doc, vs) : DecorationSet.empty
           }
         },
         appendTransaction(trs, _old, newState) {
@@ -230,7 +320,8 @@ const ViewPlugin = Extension.create({
           tr.setMeta('revTag', true)
           return tr
         }
-      })
+      }),
+      DecoPlugin
     ]
   }
 })
@@ -337,6 +428,14 @@ export const ScreenplayKeys = Extension.create<{ smart: SmartApi }>({
             return true
           })
         }
+        // Enter at the very start of a line opens a blank line above it: the line keeps its type, its notes and its synopsis
+        if (editor.state.selection.$from.parentOffset === 0) {
+          return editor.commands.command(({ tr, state }) => {
+            tr.insert(c.pos, state.schema.nodes.block.create({ kind: 'action' }))
+            tr.setSelection(TextSelection.near(tr.doc.resolve(c.pos + 3)))
+            return true
+          })
+        }
         const r = enterResult(c.kind, c.text)
         return editor.commands.command(({ tr, state }) => {
           if (r.current) setKind(tr, c.pos, r.current)
@@ -435,4 +534,53 @@ const DisarmExit = Extension.create({
   }
 })
 
-export const RoteraExtensions = [BlockNode, ViewPlugin, DisarmExit]
+/**
+ * A pasted copy of a line keeps the line's anchor (`nid`), so the copy and the original would share notes
+ * and production data. The copy loses it; the original keeps it. Cut and paste moves the line and keeps it.
+ */
+const UniqueAnchors = Extension.create({
+  name: 'uniqueAnchors',
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        appendTransaction(trs, _old, state) {
+          if (!trs.some((t) => t.docChanged && (t.getMeta('uiEvent') === 'paste' || t.getMeta('uiEvent') === 'drop'))) return null
+          // the positions in the new document that the paste wrote
+          const ranges: Range[] = []
+          trs.forEach((tr, ti) => {
+            tr.mapping.maps.forEach((map, mi) => {
+              map.forEach((_os, _oe, ns, ne) => {
+                let s = ns
+                let e = ne
+                for (let j = mi + 1; j < tr.mapping.maps.length; j++) {
+                  s = tr.mapping.maps[j].map(s, -1)
+                  e = tr.mapping.maps[j].map(e, 1)
+                }
+                ranges.push(mapRangeForward(trs, ti, s, e))
+              })
+            })
+          })
+          const inPaste = (pos: number, size: number): boolean => ranges.some((r) => pos < r.to && pos + size > r.from)
+          const outside = new Set<string>()
+          const pasted: { pos: number; nid: string }[] = []
+          state.doc.forEach((node, pos) => {
+            const nid = node.attrs.nid
+            if (typeof nid !== 'string' || !nid) return
+            if (inPaste(pos, node.nodeSize)) pasted.push({ pos, nid })
+            else outside.add(nid)
+          })
+          const seen = new Set<string>()
+          const tr = state.tr
+          for (const p of pasted) {
+            if (outside.has(p.nid) || seen.has(p.nid)) setBlockAttr(tr, p.pos, { nid: null })
+            seen.add(p.nid)
+          }
+          // part of the paste: Ctrl+Z takes both away together
+          return tr.docChanged ? tr.setMeta('noRev', true) : null
+        }
+      })
+    ]
+  }
+})
+
+export const RoteraExtensions = [BlockNode, ViewPlugin, DisarmExit, UniqueAnchors]

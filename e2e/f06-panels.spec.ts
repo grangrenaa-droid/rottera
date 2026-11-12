@@ -106,6 +106,7 @@ test.describe('F06 planning panels', () => {
     await page.locator('.lm-piece', { hasText: 'Câmera' }).click()
     await page.getByLabel('X (m)').fill('18')
     await page.getByLabel('Largura (m)').fill('4')
+    await page.getByLabel('Largura (m)').press('Enter') // a smaller set is settled when the typing is done
     const x = Number(await page.evaluate(() => {
       const list = document.querySelector('.lm-items button')
       return list?.textContent ?? ''
@@ -174,7 +175,7 @@ test.describe('accessibility scan (axe) on every screen', () => {
     await newScript(page)
     const found: string[] = []
     await page.getByRole('button', { name: 'Mais' }).click()
-    await page.getByRole('button', { name: 'Conectar ao Claude…' }).click()
+    await page.getByRole('button', { name: 'Conectar a uma IA…' }).click()
     await expect(page.getByRole('dialog')).toBeVisible()
     for (const v of await axeViolations(page)) found.push(`connect: ${v}`)
     await page.keyboard.press('Escape')

@@ -71,8 +71,10 @@ describe('what the manual says is true', () => {
       'Exportar CSV',
       'Exportar relatório (PDF)',
       'Importar FDX ou Fountain',
-      'Conectar ao Claude',
+      'Conectar a uma IA',
       'Copiar diagnóstico',
+      'Marca d’água…',
+      'Usar marca d’água no PDF',
       'Recuperar rascunho',
       'Fichas de personagem',
       'Diálogo duplo'
@@ -142,9 +144,10 @@ describe('diagnostics text', () => {
 describe('page text', () => {
   it('names the marks the paginator really writes', () => {
     const pag = src('src/shared/paginate.ts')
-    expect(pag).toContain("'(MORE)'")
-    expect(pag).toContain("(CONT'D)")
+    expect(pag).toContain("'(CONTINUA)'")
+    expect(pag).toContain('(CONT.)')
     const t = MANUAL.find((x) => x.id === 'paginas')!
-    expect(JSON.stringify(t.body)).toContain('(MORE)')
+    expect(JSON.stringify(t.body)).toContain('(CONTINUA)')
+    expect(JSON.stringify(t.body)).toContain('(CONT.)')
   })
 })

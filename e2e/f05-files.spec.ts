@@ -15,7 +15,7 @@ const file = (blocks: { kind: string; text: string }[], title = ''): string =>
 test.describe('F05 saving, opening and not losing work', () => {
   test('F05-H1 save as, close, open: same content', async ({ page, dialogs, editor }) => {
     const dir = work()
-    const path = join(dir, 'meu roteiro ação.rotera')
+    const path = join(dir, 'meu roteiro ação.rottera')
     await newScript(page)
     await page.keyboard.press('Control+2')
     await editor.pressSequentially('Conteúdo do roteiro.')
@@ -30,7 +30,7 @@ test.describe('F05 saving, opening and not losing work', () => {
   })
 
   test('F05-E1 a corrupted file is refused with a message and the app keeps working', async ({ page, dialogs }) => {
-    const bad = join(work(), 'quebrado.rotera')
+    const bad = join(work(), 'quebrado.rottera')
     writeFileSync(bad, '{"format":"rotera","script":{"blocks":[', 'utf8')
     await dialogs.open(bad)
     await page.getByRole('button', { name: 'Abrir…' }).click()
@@ -39,7 +39,7 @@ test.describe('F05 saving, opening and not losing work', () => {
   })
 
   test('F05-E2 a JSON file that is not a script is refused', async ({ page, dialogs }) => {
-    const bad = join(work(), 'outro.rotera')
+    const bad = join(work(), 'outro.rottera')
     writeFileSync(bad, '{"hello":"world"}', 'utf8')
     await dialogs.open(bad)
     await page.getByRole('button', { name: 'Abrir…' }).click()
@@ -48,8 +48,8 @@ test.describe('F05 saving, opening and not losing work', () => {
 
   test('F05-E3 typing then opening another file through the menu does not lose the typing', async ({ app, page, dialogs, editor }) => {
     const dir = work()
-    const a = join(dir, 'a.rotera')
-    const b = join(dir, 'b.rotera')
+    const a = join(dir, 'a.rottera')
+    const b = join(dir, 'b.rottera')
     writeFileSync(a, file([{ kind: 'action', text: 'Arquivo A.' }], 'A'))
     writeFileSync(b, file([{ kind: 'action', text: 'Arquivo B.' }], 'B'))
     await dialogs.open(a)
@@ -66,7 +66,7 @@ test.describe('F05 saving, opening and not losing work', () => {
   })
 
   test('F05-E4 closing the window right after typing keeps the typing', async ({ app, page, dialogs, editor }) => {
-    const a = join(work(), 'fecha.rotera')
+    const a = join(work(), 'fecha.rottera')
     writeFileSync(a, file([{ kind: 'action', text: 'Antes.' }], 'F'))
     await dialogs.open(a)
     await page.getByRole('button', { name: 'Abrir…' }).click()
@@ -89,7 +89,7 @@ test.describe('F05 saving, opening and not losing work', () => {
 
   test('F05-E6 saving to a read-only file reports the error', async ({ page, dialogs, editor }) => {
     const dir = work()
-    const ro = join(dir, 'leitura.rotera')
+    const ro = join(dir, 'leitura.rottera')
     writeFileSync(ro, file([{ kind: 'action', text: 'RO.' }], 'RO'))
     chmodSync(ro, 0o444)
     await dialogs.open(ro)
@@ -102,7 +102,7 @@ test.describe('F05 saving, opening and not losing work', () => {
 
   test('F05-E7 a script saved twice keeps one file and no temp files', async ({ page, dialogs, editor }) => {
     const dir = work()
-    const p = join(dir, 'dois.rotera')
+    const p = join(dir, 'dois.rottera')
     await newScript(page)
     await page.keyboard.press('Control+2')
     await editor.pressSequentially('Um.')
@@ -112,7 +112,7 @@ test.describe('F05 saving, opening and not losing work', () => {
     await editor.pressSequentially(' Dois.')
     await page.waitForTimeout(2300)
     const names = (await import('node:fs')).readdirSync(dir)
-    expect(names).toEqual(['dois.rotera'])
+    expect(names).toEqual(['dois.rottera'])
     expect(readFileSync(p, 'utf8')).toContain('Um. Dois.')
   })
 

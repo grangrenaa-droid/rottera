@@ -46,4 +46,47 @@ describe('report page', () => {
     const c = cleanReport({ ...base, rows: [['só uma']] })
     expect(c.rows[0]).toHaveLength(3)
   })
+
+  it('prints groups under headings of their own, with their count and note, and keeps each group on a page', () => {
+    const h = buildReportHtml({
+      ...base,
+      rows: [],
+      sections: [
+        { title: 'Dia 1', summary: '2 cenas · 4/8 pág.', note: 'Chamada <7h>', rows: [[1, 'COZINHA', '1'], [4, 'COZINHA', '2']] },
+        { title: 'Dia 2', rows: [] }
+      ]
+    })
+    expect(h.match(/<tbody class="group">/g)).toHaveLength(2)
+    expect(h).toContain('<span>Dia 1</span><span class="gs">2 cenas · 4/8 pág.</span>')
+    expect(h).toContain('<tr class="gn"><td colspan="3">Chamada &lt;7h&gt;</td></tr>')
+    expect(h).toContain('Nenhuma cena.')
+    expect(h).toContain('tbody.group { break-inside: avoid }')
+    expect(h).not.toContain('Sem dados neste relatório.')
+  })
+
+  it('never cuts a column name or a word in the middle', () => {
+    const h = buildReportHtml(base)
+    expect(h).toContain('white-space: nowrap }')
+    expect(h).not.toContain('overflow-wrap: anywhere')
+  })
+
+  it('cleans the groups too', () => {
+    const c = cleanReport({ ...base, sections: [{ title: 'x'.repeat(500), rows: [['a']], note: '  ' }] })
+    expect(c.sections![0].title).toHaveLength(200)
+    expect(c.sections![0].rows[0]).toHaveLength(3)
+    expect(c.sections![0].note).toBeUndefined()
+  })
+
+  it('numbers with a unit line up as numbers; a Total line stands out; a narrow table is not stretched', () => {
+    const h = buildReportHtml({
+      ...base,
+      columns: ['Aparelho', 'Total'],
+      rows: [['Fresnel', '2.000 W'], ['LED', '200 W'], ['Total', '2.200 W'], ['Corrente em 127 V', '17,3 A']]
+    })
+    expect(h).toContain('<td class="n">2.000 W</td>')
+    expect(h).toContain('<td class="n">17,3 A</td>')
+    expect(h).toContain('<tr class="total"><td>Total</td>')
+    expect(h.match(/class="total"/g)).toHaveLength(1)
+    expect(h).toContain('table { width: auto;')
+  })
 })

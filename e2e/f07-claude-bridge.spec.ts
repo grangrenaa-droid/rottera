@@ -119,8 +119,8 @@ test.describe('F07 Claude bridge: security and robustness', () => {
   test('F07-C3 turning the connection off removes the key file and refuses connections', async ({ page, userData }) => {
     await expect.poll(() => existsSync(join(userData, 'bridge.json'))).toBe(true)
     const { port } = bridgeInfo(userData)
-    await page.getByRole('button', { name: 'Conectar ao Claude…' }).click()
-    await page.getByLabel('Permitir que o Claude edite o roteiro (somente neste computador)').uncheck()
+    await page.getByRole('button', { name: 'Conectar a uma IA…' }).click()
+    await page.getByLabel('Permitir que a IA edite o roteiro (somente neste computador)').uncheck()
     await expect.poll(() => existsSync(join(userData, 'bridge.json'))).toBe(false)
     const refused = await fetch(`http://127.0.0.1:${port}/rpc`, { method: 'POST' }).then(() => false, () => true)
     expect(refused).toBe(true)

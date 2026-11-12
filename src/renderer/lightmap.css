@@ -33,3 +33,25 @@
   .lm-view { grid-template-columns: 200px minmax(0, 1fr); }
   .lm-props { grid-column: 1 / -1; max-height: none; }
 }
+
+/* technical sheet of a light or camera */
+.lm-tech { border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 6px 10px 10px; margin: 8px 0; display: grid; gap: 4px; }
+.lm-tech legend { font-weight: 600; font-size: 13px; padding: 0 4px; }
+.lm-tech .small { font-size: 12px; margin: 0; }
+.lm-load { font-size: 13px; margin: 8px 0; }
+.lm-endview { font-size: 13px; margin: 4px 0; }
+/* points of a movement or of an actor’s blocking */
+.lm-stops { display: grid; gap: 6px; margin: 4px 0; }
+.lm-stop { display: grid; grid-template-columns: 34px repeat(3, minmax(0, 1fr)) auto; gap: 4px; align-items: end; font-size: 12px; }
+.lm-stop label { display: grid; gap: 2px; font-size: 11px; }
+.lm-stop input { min-width: 0; height: 28px; }
+.lm-stop > .btn { grid-column: 2 / -1; justify-self: start; }
+/* the quick line of a technical sheet */
+.lm-quick { display: grid; gap: 3px; margin-bottom: 6px; padding-bottom: 8px; border-bottom: 1px dashed var(--color-border); }
+.lm-quick input { width: 100%; box-sizing: border-box; }
+.lm-quick .small { margin: 0; }
+/* the quick line of the map: its own strip under the bar above the drawing */
+.lm-quick.map { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: -6px 0 12px; padding: 0; border: 0; }
+.lm-quick.map label { font-weight: 600; }
+.lm-quick.map input { width: 240px; }
+.lm-quick.map .small { flex: 1 1 260px; }

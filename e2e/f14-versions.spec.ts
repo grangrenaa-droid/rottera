@@ -47,7 +47,7 @@ async function openVersions(page: Page): Promise<void> {
 test.describe('F14 version history and recovery', () => {
   test('F14-H1 saving a script creates a version that shows in the list', async ({ page, dialogs }) => {
     const dir = await openScript(page, dialogs, scenes(4))
-    await saveAs(page, dialogs, join(dir, 'a.rotera'))
+    await saveAs(page, dialogs, join(dir, 'a.rottera'))
     await openVersions(page)
     const items = page.locator('.versions li')
     await expect(items).toHaveCount(1)
@@ -57,7 +57,7 @@ test.describe('F14 version history and recovery', () => {
 
   test('F14-H2 a big loss is kept, and restoring brings it back without losing the current text', async ({ page, dialogs, userData }) => {
     const dir = await openScript(page, dialogs, scenes(12))
-    const file = join(dir, 'b.rotera')
+    const file = join(dir, 'b.rottera')
     await saveAs(page, dialogs, file)
     // an accident: nearly everything is removed, then autosave writes the short script
     const total = (await rpc(userData, 'status')).result.blockCount as number
@@ -83,7 +83,7 @@ test.describe('F14 version history and recovery', () => {
 
   test('F14-E1 restoring twice is reversible: the text from before the first restore comes back', async ({ page, dialogs, userData }) => {
     const dir = await openScript(page, dialogs, scenes(12))
-    const file = join(dir, 'c.rotera')
+    const file = join(dir, 'c.rottera')
     await saveAs(page, dialogs, file)
     const total = (await rpc(userData, 'status')).result.blockCount as number
     await rpc(userData, 'delete_blocks', { start: 2, end: total })
@@ -108,7 +108,7 @@ test.describe('F14 version history and recovery', () => {
 
   test('F14-E3 a first version is made when a file is opened, so edits by Claude can always be undone', async ({ page, dialogs, userData }) => {
     const dir = await openScript(page, dialogs, scenes(5))
-    const file = join(dir, 'd.rotera')
+    const file = join(dir, 'd.rottera')
     await saveAs(page, dialogs, file)
     await page.getByRole('button', { name: 'Início' }).click()
     await dialogs.open(file)
@@ -123,7 +123,7 @@ test.describe('F14 version history and recovery', () => {
   test('F14-N1 the versions dialog is not reachable from the home screen and is accessible', async ({ page, dialogs }) => {
     await expect(page.getByRole('button', { name: 'Mais' })).toHaveCount(0)
     const dir = await openScript(page, dialogs, scenes(4))
-    await saveAs(page, dialogs, join(dir, 'e.rotera'))
+    await saveAs(page, dialogs, join(dir, 'e.rottera'))
     await openVersions(page)
     expect(await axeViolations(page)).toEqual([])
     await page.keyboard.press('Escape')
@@ -148,7 +148,7 @@ test.describe('F14 recovery after an unexpected close', () => {
     const dir = mkdtempSync(join(tmpdir(), 'rotera-f14r-files-'))
     const src = join(dir, 'in.fountain')
     writeFileSync(src, scenes(3, ' ÚNICO'), 'utf8')
-    const file = join(dir, 'queda.rotera')
+    const file = join(dir, 'queda.rottera')
     await first.evaluate(({ dialog }, a) => {
       dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [a.src] })) as never
       dialog.showSaveDialog = (async () => ({ canceled: false, filePath: a.file })) as never

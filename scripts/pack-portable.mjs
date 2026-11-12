@@ -31,6 +31,8 @@ rmSync(join(out, 'resources', 'default_app.asar'), { force: true })
 cpSync(asar, join(out, 'resources', 'app.asar'))
 cpSync(join(root, 'mcp'), join(out, 'resources', 'mcp'), { recursive: true })
 cpSync(join(root, 'scripts', 'LEIA-ME.txt'), join(out, 'LEIA-ME.txt'))
+// The exe keeps Electron's own icon (see above); shortcuts to it take the app's icon from this file.
+cpSync(join(root, 'build', 'icon.ico'), join(out, 'rottera.ico'))
 
 if (process.platform === 'win32') {
   const zip = join(root, 'dist', `Rottera-${version}-win-x64-portable.zip`)

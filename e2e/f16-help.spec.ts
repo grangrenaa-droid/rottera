@@ -10,7 +10,7 @@ test.afterEach(({ errors }) => {
 test.describe('F16 manual and diagnostics', () => {
   test('F16-H1 the manual opens from the home screen and from F1, and is searchable without accents', async ({ page, app }) => {
     await page.getByRole('button', { name: 'Manual', exact: true }).click()
-    const dlg = page.getByRole('dialog', { name: 'Manual do Rotera' })
+    const dlg = page.getByRole('dialog', { name: 'Manual do Rottera' })
     await expect(dlg).toBeVisible()
     await expect(dlg.getByRole('heading', { name: 'Primeiros passos' })).toBeVisible()
     await dlg.getByLabel('Buscar no manual').fill('dialogo duplo')
@@ -20,12 +20,12 @@ test.describe('F16 manual and diagnostics', () => {
     await page.keyboard.press('Escape')
     await expect(page.locator('dialog')).toHaveCount(0) // unmounted, not only closed
     await menu(app, 'manual')
-    await expect(page.getByRole('dialog', { name: 'Manual do Rotera' })).toBeVisible()
+    await expect(page.getByRole('dialog', { name: 'Manual do Rottera' })).toBeVisible()
   })
 
   test('F16-E1 nothing found says so and clearing the search brings all topics back', async ({ page }) => {
     await page.getByRole('button', { name: 'Manual', exact: true }).click()
-    const dlg = page.getByRole('dialog', { name: 'Manual do Rotera' })
+    const dlg = page.getByRole('dialog', { name: 'Manual do Rottera' })
     const search = dlg.getByLabel('Buscar no manual')
     await search.fill('xyzzy qwerty')
     await expect(dlg).toContainText('Nada encontrado.')
@@ -36,7 +36,7 @@ test.describe('F16 manual and diagnostics', () => {
 
   test('F16-E2 picking a topic shows its text and marks it as current', async ({ page }) => {
     await page.getByRole('button', { name: 'Manual', exact: true }).click()
-    const dlg = page.getByRole('dialog', { name: 'Manual do Rotera' })
+    const dlg = page.getByRole('dialog', { name: 'Manual do Rottera' })
     await dlg.getByRole('button', { name: 'Storyboard', exact: true }).click()
     await expect(dlg.getByRole('button', { name: 'Storyboard', exact: true })).toHaveAttribute('aria-current', 'true')
     await expect(dlg.locator('.manual-body')).toContainText('1600 pixels')
@@ -55,7 +55,7 @@ test.describe('F16 manual and diagnostics', () => {
     const box = dlg.getByLabel('Texto do diagnóstico')
     await expect(box).not.toHaveValue('Carregando…')
     const text = await box.inputValue()
-    expect(text).toContain('Diagnóstico do Rotera')
+    expect(text).toContain('Diagnóstico do Rottera')
     expect(text).toContain('Electron')
     expect(text).toMatch(/\d+ blocos, 1 cenas/)
     for (const secret of ['PORÃO', 'confidencial', 'Senha do cofre', 'Segredo-do-Roteiro', 'Maria', dir]) {

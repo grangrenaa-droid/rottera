@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { expect, newScript, rows, test } from './fixtures'
+import { expect, menu, newScript, rows, test } from './fixtures'
 import { parseFdx, toFdx } from '../src/shared/fdx'
 import { parseFountain, toFountain } from '../src/shared/fountain'
 import type { Block, Script } from '../src/shared/types'
@@ -39,18 +39,18 @@ test.describe('F03 navigator, find and replace', () => {
     await expect(nav.getByRole('button', { name: 'Descer cena 3' })).toBeDisabled()
   })
 
-  test('F03-E2 find with special characters is literal', async ({ page, dialogs }) => {
+  test('F03-E2 find with special characters is literal', async ({ app, page, dialogs }) => {
     await importFountain(page, dialogs, src)
-    await page.getByRole('button', { name: 'Localizar' }).click()
+    await menu(app, 'find') // Ctrl+F; the toolbar button may sit in Mais
     await page.getByPlaceholder('Localizar').fill('(1.5) [x]')
     await expect(page.locator('.findbar')).toContainText('1 de 1')
     await page.getByPlaceholder('Localizar').fill('.*')
     await expect(page.locator('.findbar')).toContainText('Nada encontrado')
   })
 
-  test('F03-E3 replace all where the replacement contains the search text', async ({ page, dialogs }) => {
+  test('F03-E3 replace all where the replacement contains the search text', async ({ app, page, dialogs }) => {
     await importFountain(page, dialogs, src)
-    await page.getByRole('button', { name: 'Localizar' }).click()
+    await menu(app, 'find') // Ctrl+F; the toolbar button may sit in Mais
     await page.getByPlaceholder('Localizar').fill('Marina')
     await page.getByPlaceholder('Substituir por').fill('Marina Souza')
     await page.getByRole('button', { name: 'Substituir tudo' }).click()
@@ -59,17 +59,17 @@ test.describe('F03 navigator, find and replace', () => {
     expect(all).not.toContain('Marina Souza Souza')
   })
 
-  test('F03-E4 replace with nothing deletes the match', async ({ page, dialogs }) => {
+  test('F03-E4 replace with nothing deletes the match', async ({ app, page, dialogs }) => {
     await importFountain(page, dialogs, src)
-    await page.getByRole('button', { name: 'Localizar' }).click()
+    await menu(app, 'find') // Ctrl+F; the toolbar button may sit in Mais
     await page.getByPlaceholder('Localizar').fill(' [x]')
     await page.getByRole('button', { name: 'Substituir tudo' }).click()
     expect((await rows(page)).map((r) => r.text).join('|')).toContain('espera (1.5).')
   })
 
-  test('F03-E5 case sensitivity', async ({ page, dialogs }) => {
+  test('F03-E5 case sensitivity', async ({ app, page, dialogs }) => {
     await importFountain(page, dialogs, src)
-    await page.getByRole('button', { name: 'Localizar' }).click()
+    await menu(app, 'find') // Ctrl+F; the toolbar button may sit in Mais
     await page.getByPlaceholder('Localizar').fill('marina')
     await expect(page.locator('.findbar')).toContainText('de 2')
     await page.getByLabel('Maiúsculas').check()
@@ -152,7 +152,8 @@ test.describe('F04 export', () => {
     const imported = Date.now() - t0
     const out = join(work(), 'grande.pdf')
     await dialogs.save(out)
-    await page.getByRole('button', { name: 'Exportar PDF' }).click()
+    // a CSS locator: the role lookup walks 1800 scenes' accessibility tree and can take longer than the click timeout (see F13)
+    await page.locator('.toolbar button', { hasText: /^Exportar PDF$/ }).click()
     await expect.poll(() => { try { return readFileSync(out).length } catch { return 0 } }, { timeout: 90000 }).toBeGreaterThan(10000)
     expect(imported).toBeLessThan(30000)
     // typing stays responsive on a big script

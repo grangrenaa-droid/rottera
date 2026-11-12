@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { CharacterSheet, Script } from '../shared/types'
 import { CharactersView } from './Characters'
-import { buildReports, reportToCsv } from '../shared/reports'
+import { buildReports, reportToCsv, type Report } from '../shared/reports'
 
 interface Props {
   script: Script
   onExport(name: string, csv: string): void
   onCharacters(sheets: CharacterSheet[]): void
   onExportCharacters(): void
-  onExportPdf(report: { title: string; columns: string[]; rows: (string | number)[][] }, landscape: boolean): void
+  onExportPdf(report: Report, landscape: boolean): void
   flash(text: string): void
 }
 
@@ -66,7 +66,7 @@ export function ReportsView({ script, onExport, onCharacters, onExportCharacters
             <button
               className="btn secondary"
               disabled={report.rows.length === 0}
-              onClick={() => onExportPdf({ title: report.title, columns: report.columns, rows: report.rows }, landscape)}
+              onClick={() => onExportPdf(report, landscape)}
             >
               Exportar relatório (PDF)
             </button>

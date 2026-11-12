@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Frame, Storyboard, StoryboardAspect, StoryboardLayout } from '../shared/types'
 import { ASPECTS, LAYOUTS, aspectRatio, placeInScene, storyboardMegabytes } from '../shared/storyboard'
+import { ANGLES, LENSES, MOVES, SHOTS } from '../shared/lightmap'
 import { newId } from '../shared/structures'
 
 const MAX_SIDE = 1600
@@ -37,9 +38,11 @@ interface Props {
   onChange(sb: Storyboard): void
   onExport(): void
   flash(text: string): void
+  /** Opens on the first frame of this scene (from the navigator or the breakdown). */
+  focusScene?: string
 }
 
-export function StoryboardView({ storyboard, scenes, onChange, onExport, flash }: Props): JSX.Element {
+export function StoryboardView({ storyboard, scenes, onChange, onExport, flash, focusScene }: Props): JSX.Element {
   const { frames } = storyboard
   const addInput = useRef<HTMLInputElement>(null)
   const replaceInput = useRef<HTMLInputElement>(null)
@@ -47,7 +50,7 @@ export function StoryboardView({ storyboard, scenes, onChange, onExport, flash }
   const [dragId, setDragId] = useState<string | null>(null)
   const [over, setOver] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [jumpId, setJumpId] = useState<string | null>(null)
+  const [jumpId, setJumpId] = useState<string | null>(() => (focusScene ? storyboard.frames.find((f) => f.scene === focusScene)?.id ?? null : null))
   const sbRef = useRef(storyboard)
   sbRef.current = storyboard
 
@@ -132,6 +135,14 @@ export function StoryboardView({ storyboard, scenes, onChange, onExport, flash }
   }
 
   const ratio = aspectRatio(storyboard.aspect)
+  // the lens suggestions, shared by every frame
+  const lensList = (
+    <datalist id="sb-lenses">
+      {LENSES.map((l) => (
+        <option key={l} value={l} />
+      ))}
+    </datalist>
+  )
 
   return (
     <div
@@ -286,6 +297,40 @@ export function StoryboardView({ storyboard, scenes, onChange, onExport, flash }
                 value={f.caption}
                 onChange={(e) => setFrame(f.id, { caption: e.target.value })}
               />
+              <div className="sb-shot">
+                {i === 0 && lensList}
+                <select aria-label={`Plano do quadro ${i + 1}`} value={f.shot ?? ''} onChange={(e) => setFrame(f.id, { shot: e.target.value || undefined })}>
+                  <option value="">Plano…</option>
+                  {SHOTS.map((s) => (
+                    <option key={s}>{s}</option>
+                  ))}
+                </select>
+                <select aria-label={`Ângulo do quadro ${i + 1}`} value={f.angle ?? ''} onChange={(e) => setFrame(f.id, { angle: e.target.value || undefined })}>
+                  <option value="">Ângulo…</option>
+                  {ANGLES.map((s) => (
+                    <option key={s}>{s}</option>
+                  ))}
+                </select>
+                <select aria-label={`Movimento do quadro ${i + 1}`} value={f.move ?? ''} onChange={(e) => setFrame(f.id, { move: e.target.value || undefined })}>
+                  <option value="">Movimento…</option>
+                  {MOVES.map((s) => (
+                    <option key={s}>{s}</option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  list="sb-lenses"
+                  min={4}
+                  max={1200}
+                  placeholder="Lente mm"
+                  aria-label={`Lente do quadro ${i + 1} (mm)`}
+                  value={f.lens ?? ''}
+                  onChange={(e) => {
+                    const n = Number(e.target.value)
+                    setFrame(f.id, { lens: e.target.value === '' || !Number.isFinite(n) ? undefined : Math.min(1200, Math.max(4, n)) })
+                  }}
+                />
+              </div>
               <div className="sb-actions">
                 <label className="sr-only" htmlFor={`scene-${f.id}`}>
                   Cena do quadro {i + 1}

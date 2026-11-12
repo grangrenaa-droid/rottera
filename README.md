@@ -20,7 +20,7 @@ Cada pacote traz um `LEIA-ME.txt` com o passo a passo. É uma versão de teste: 
 - **Relatórios** e **fichas de personagem**.
 - **PDF** em A4 ou Carta, com visualização antes de exportar (Ctrl+Shift+P); também exporta FDX e Fountain.
 - **Versões anteriores** de cada roteiro e salvamento automático.
-- **Conexão com o Claude** (opcional, desligada até você ativar): o Claude lê e edita o roteiro aberto neste computador.
+- **Conexão com uma IA** (opcional, desligada até você ativar): Claude, Codex, Gemini CLI, Cursor, VS Code, LM Studio ou qualquer app com MCP lê e edita o roteiro aberto neste computador.
 
 Os arquivos `.rottera` são iguais nos dois sistemas.
 
@@ -32,7 +32,7 @@ Electron, React, TipTap e TypeScript.
 npm install
 npm run dev            # abre o app em modo de desenvolvimento
 npm test               # testes unitários
-npm run test:e2e       # gera o app e testa a conexão com o Claude de ponta a ponta
+npm run test:e2e       # gera o app e testa a conexão MCP de ponta a ponta
 npm run dist:portable  # pasta e zip para Windows em dist/
 npm run dist:linux     # .tar.gz para Linux em dist/ (pode ser gerado no Windows)
 ```

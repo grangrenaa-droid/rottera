@@ -2,11 +2,12 @@
 /*
  * Rottera MCP server.
  *
- * Lets Claude read and edit the script that is open in the Rottera desktop app.
+ * Lets any MCP client (Claude, Codex, Gemini CLI, Cursor, VS Code, LM Studio...)
+ * read and edit the script that is open in the Rottera desktop app.
  * It speaks MCP over stdio and forwards each tool call to the app's local bridge
  * (127.0.0.1, bearer token). It has no dependencies.
  *
- * The app must be running with "Conexão com o Claude" turned on.
+ * The app must be running with the AI connection turned on.
  */
 'use strict'
 
@@ -31,6 +32,8 @@ function bridgeFile() {
   const candidates = [
     process.env.ROTERA_BRIDGE_FILE,
     path.join(dataDir('Rottera'), 'bridge.json'),
+    // the app installed from the Microsoft Store writes it here (its AppData is private to the package)
+    path.join(os.homedir(), '.rottera', 'bridge.json'),
     process.env.CLAPBOARD_BRIDGE_FILE,
     path.join(dataDir('Clapboard'), 'bridge.json')
   ].filter(Boolean)
@@ -56,7 +59,7 @@ async function callApp(method, params) {
     info = JSON.parse(fs.readFileSync(bridgeFile(), 'utf8'))
   } catch {
     throw new Error(
-      'O Rottera não está aberto, ou a conexão com o Claude está desligada (menu Arquivo > Conectar ao Claude).'
+      'O Rottera não está aberto, ou a conexão com a IA está desligada (menu Arquivo > Conectar a uma IA).'
     )
   }
   let res
@@ -289,26 +292,34 @@ const TOOLS = [
   {
     name: 'add_frame',
     description:
-      'Planeja um plano no storyboard: cria um quadro sem imagem com legenda (ação, enquadramento, som) e, opcionalmente, o número da cena. O roteirista coloca a imagem depois. O campo after é o índice do quadro anterior (-1 para o começo; omita para o fim).',
+      'Planeja um plano no storyboard: cria um quadro sem imagem com legenda (ação, enquadramento, som) e, opcionalmente, o número da cena e o plano (shot, angle, move, lens), para a Lista de planos. O roteirista coloca a imagem depois. O campo after é o índice do quadro anterior (-1 para o começo; omita para o fim).',
     inputSchema: {
       type: 'object',
       properties: {
         caption: { type: 'string' },
         scene: { type: 'string' },
-        after: { type: 'integer', minimum: -1 }
+        after: { type: 'integer', minimum: -1 },
+        shot: { type: 'string', description: 'Tamanho do plano: Grande plano geral, Plano geral, Plano conjunto, Plano americano, Plano médio, Primeiro plano, Close, Plano detalhe, Ponto de vista (POV), Sobre o ombro, Inserto.' },
+        angle: { type: 'string', description: 'Ângulo: Normal, Plongée, Contra-plongée, Zenital, Holandês (inclinado), Nível do chão, Ponto de vista.' },
+        move: { type: 'string', description: 'Movimento: Fixa, Panorâmica, Tilt, Travelling, Dolly in, Dolly out, Zoom, Steadicam / gimbal, Câmera na mão, Grua, Drone.' },
+        lens: { type: 'number', description: 'Lente em mm.' }
       },
       required: ['caption']
     }
   },
   {
     name: 'set_frame',
-    description: 'Muda a legenda e/ou a cena de um quadro do storyboard.',
+    description: 'Muda a legenda, a cena e/ou o plano (tamanho, ângulo, movimento, lente) de um quadro do storyboard. Os quadros com plano formam a Lista de planos (Relatórios). null ou "" apaga um campo do plano.',
     inputSchema: {
       type: 'object',
       properties: {
         index: { type: 'integer', minimum: 0 },
         caption: { type: 'string' },
-        scene: { type: 'string' }
+        scene: { type: 'string' },
+        shot: { type: 'string', description: 'Tamanho do plano: Grande plano geral, Plano geral, Plano conjunto, Plano americano, Plano médio, Primeiro plano, Close, Plano detalhe, Ponto de vista (POV), Sobre o ombro, Inserto.' },
+        angle: { type: 'string', description: 'Ângulo: Normal, Plongée, Contra-plongée, Zenital, Holandês (inclinado), Nível do chão, Ponto de vista.' },
+        move: { type: 'string', description: 'Movimento: Fixa, Panorâmica, Tilt, Travelling, Dolly in, Dolly out, Zoom, Steadicam / gimbal, Câmera na mão, Grua, Drone.' },
+        lens: { type: 'number', description: 'Lente em mm.' }
       },
       required: ['index']
     }
@@ -329,7 +340,12 @@ const TOOLS = [
   {
     name: 'get_lightmaps',
     description:
-      'Lê os mapas de luz (diagramas de iluminação vistos de cima): tamanho do set em metros e cada peça com tipo, posição, rotação e legenda. Rotação 0 aponta para o fundo do set (topo do desenho), em sentido horário.',
+      'Lê os mapas de luz (diagramas de iluminação vistos de cima): tamanho do set em metros e cada peça com tipo, posição, rotação, legenda e ficha técnica (luzes com número, potência, temperatura, gelatina, difusão, função; câmeras com lente, plano, movimento), e a carga elétrica de cada mapa. Rotação 0 aponta para o fundo do set (topo do desenho), em sentido horário.',
+    inputSchema: { type: 'object', properties: {} }
+  },
+  {
+    name: 'get_lighting_gear',
+    description: 'Lista de equipamento de luz de todos os mapas: quantos aparelhos de cada tipo e potência, em quais mapas, e a carga total (W e corrente em 127 V e 220 V). Útil para o pedido à locadora e o gerador.',
     inputSchema: { type: 'object', properties: {} }
   },
   {
@@ -349,7 +365,7 @@ const TOOLS = [
   {
     name: 'add_light_item',
     description:
-      'Coloca uma peça no mapa de luz. Posição x,y em metros a partir do canto superior esquerdo. Tipos: camera, actor, fresnel, led, hmi, softbox, practical, sun, flag, diffuser, reflector, bounce, cstand, monitor, dolly, table, chair, door, window, wall. Luzes e câmeras aceitam spread (abertura em graus) e range (alcance em metros); modificadores, trilho, porta, janela e parede aceitam length.',
+      'Coloca uma peça no mapa de luz. Posição x,y em metros a partir do canto superior esquerdo. Tipos: camera, actor (aceita movePoints para a marcação), fresnel, led, hmi, softbox, practical, sun, par, ellipsoidal, tube, kino, chinaball, dedo, skypanel, moon, flag, diffuser, reflector, bounce, overhead, cookie, monitor, haze, generator, table, chair, door, window, wall. Luzes e câmeras aceitam spread (abertura em graus) e range (alcance em metros); modificadores, trilho, porta, janela e parede aceitam length; a mesa aceita length (comprimento) e depth (largura). Ficha técnica das luzes: watts, kelvin, gel (ex.: CTO, 1/2 CTB, ND 0.6), diffusion (ex.: 216, Grid Cloth), intensity (0-100), height (m), role (key, fill, back, rim, background, practical, ambient, effect). Câmera: lens (mm; com ela o ângulo de visão é calculado), sensor (s35, ff, apsc, mft, s16), height, shot (ex.: Plano médio, Close), move (ex.: Travelling, Câmera na mão).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -361,14 +377,32 @@ const TOOLS = [
         label: { type: 'string' },
         spread: { type: 'number' },
         range: { type: 'number' },
-        length: { type: 'number' }
+        length: { type: 'number' },
+        depth: { type: 'number', description: 'Mesa: largura em metros (length é o comprimento).' },
+        watts: { type: 'number', description: 'Luz: potência em W.' },
+        kelvin: { type: 'number', description: 'Luz: temperatura de cor em K (3200 tungstênio, 5600 dia).' },
+        gel: { type: 'string', description: 'Luz: gelatina (CTO, 1/2 CTO, CTB, 1/2 CTB, Plus Green, ND 0.6...).' },
+        diffusion: { type: 'string', description: 'Luz: difusão (216, 250, Grid Cloth, Seda...).' },
+        intensity: { type: 'number', minimum: 0, maximum: 100, description: 'Luz: dimmer em %.' },
+        role: { type: 'string', enum: ['key', 'fill', 'back', 'rim', 'background', 'practical', 'ambient', 'effect'], description: 'Luz: função (principal, preenchimento, contra, recorte, fundo, prática, ambiente, efeito).' },
+        height: { type: 'number', description: 'Luz ou câmera: altura em metros.' },
+        lens: { type: 'number', description: 'Câmera: lente em mm; o ângulo de visão passa a ser calculado.' },
+        sensor: { type: 'string', enum: ['s35', 'ff', 'apsc', 'mft', 's16'] },
+        shot: { type: 'string', description: 'Câmera: tamanho do plano (Plano médio, Close...).' },
+        move: { type: 'string', description: 'Câmera: movimento (Fixa, Travelling, Câmera na mão...).' },
+        moveTo: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' } }, description: 'Câmera: onde termina um movimento que leva a câmera de um lugar a outro (travelling, dolly, steadicam, mão, grua, drone), em metros no mapa. Sem ele, 2 m no sentido comum do movimento.' },
+        moveVia: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' } }, description: 'Câmera: ponto por onde o caminho passa na metade, em metros (curva o caminho). Sem ele, o caminho é reto. No travelling e no dolly o trilho vira um arco de círculo por esse ponto.' },
+        moveRot: { type: 'number', description: 'Câmera: para onde ela aponta no fim do movimento ou da panorâmica, em graus. Sem ele, a mesma rotação do começo (na panorâmica, 60° a mais).' },
+        movePoints: { type: 'array', items: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' }, rot: { type: 'number' }, via: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' } } } }, required: ['x', 'y'] }, description: 'Câmera com movimento que leva de um lugar a outro, ou ator (marcação): os pontos por onde passa depois de onde está, em ordem, em metros; rot = para onde aponta/olha naquele ponto (sem ele, como no ponto anterior); via = ponto por onde o trecho até ali passa na metade (curva; no travelling e no dolly vira arco de círculo).' },
+        endRange: { type: 'number', description: 'Câmera com Zoom: até onde vai o campo de visão no fim, em metros; a lente acompanha (mais longe, lente mais longa). No dolly a lente e o alcance do fim são calculados para manter o enquadramento.' },
+        panAngle: { type: 'number', description: 'Câmera: giro da panorâmica em graus, positivo no sentido horário (padrão 60).' }
       },
       required: ['type']
     }
   },
   {
     name: 'update_light_item',
-    description: 'Muda posição, rotação, legenda ou tamanho de uma peça do mapa de luz (item = índice ou id).',
+    description: 'Muda posição, rotação, legenda, tamanho ou a ficha técnica de uma peça do mapa de luz (item = índice ou id). null apaga um campo da ficha.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -380,7 +414,25 @@ const TOOLS = [
         label: { type: 'string' },
         spread: { type: 'number' },
         range: { type: 'number' },
-        length: { type: 'number' }
+        length: { type: 'number' },
+        depth: { type: 'number', description: 'Mesa: largura em metros (length é o comprimento).' },
+        watts: { type: 'number', description: 'Luz: potência em W.' },
+        kelvin: { type: 'number', description: 'Luz: temperatura de cor em K (3200 tungstênio, 5600 dia).' },
+        gel: { type: 'string', description: 'Luz: gelatina (CTO, 1/2 CTO, CTB, 1/2 CTB, Plus Green, ND 0.6...).' },
+        diffusion: { type: 'string', description: 'Luz: difusão (216, 250, Grid Cloth, Seda...).' },
+        intensity: { type: 'number', minimum: 0, maximum: 100, description: 'Luz: dimmer em %.' },
+        role: { type: 'string', enum: ['key', 'fill', 'back', 'rim', 'background', 'practical', 'ambient', 'effect'], description: 'Luz: função (principal, preenchimento, contra, recorte, fundo, prática, ambiente, efeito).' },
+        height: { type: 'number', description: 'Luz ou câmera: altura em metros.' },
+        lens: { type: 'number', description: 'Câmera: lente em mm; o ângulo de visão passa a ser calculado.' },
+        sensor: { type: 'string', enum: ['s35', 'ff', 'apsc', 'mft', 's16'] },
+        shot: { type: 'string', description: 'Câmera: tamanho do plano (Plano médio, Close...).' },
+        move: { type: 'string', description: 'Câmera: movimento (Fixa, Travelling, Câmera na mão...).' },
+        moveTo: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' } }, description: 'Câmera: onde termina um movimento que leva a câmera de um lugar a outro (travelling, dolly, steadicam, mão, grua, drone), em metros no mapa. Sem ele, 2 m no sentido comum do movimento.' },
+        moveVia: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' } }, description: 'Câmera: ponto por onde o caminho passa na metade, em metros (curva o caminho). Sem ele, o caminho é reto. No travelling e no dolly o trilho vira um arco de círculo por esse ponto.' },
+        moveRot: { type: 'number', description: 'Câmera: para onde ela aponta no fim do movimento ou da panorâmica, em graus. Sem ele, a mesma rotação do começo (na panorâmica, 60° a mais).' },
+        movePoints: { type: 'array', items: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' }, rot: { type: 'number' }, via: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' } } } }, required: ['x', 'y'] }, description: 'Câmera com movimento que leva de um lugar a outro, ou ator (marcação): os pontos por onde passa depois de onde está, em ordem, em metros; rot = para onde aponta/olha naquele ponto (sem ele, como no ponto anterior); via = ponto por onde o trecho até ali passa na metade (curva; no travelling e no dolly vira arco de círculo).' },
+        endRange: { type: 'number', description: 'Câmera com Zoom: até onde vai o campo de visão no fim, em metros; a lente acompanha (mais longe, lente mais longa). No dolly a lente e o alcance do fim são calculados para manter o enquadramento.' },
+        panAngle: { type: 'number', description: 'Câmera: giro da panorâmica em graus, positivo no sentido horário (padrão 60).' }
       },
       required: ['item']
     }
@@ -427,6 +479,63 @@ const TOOLS = [
     }
   },
   {
+    name: 'set_synopsis',
+    description:
+      'Escreve a sinopse de uma cena: uma ou duas frases sobre o que acontece nela (até 400 caracteres, uma linha). Ela aparece em cinza sob o cabeçalho, no navegador de cenas, na Escaleta (Relatórios) e na ordem do dia; não sai no PDF do roteiro. Indique a cena pelo número (scene, como em get_outline) ou pelo índice do cabeçalho (index). text vazio apaga a sinopse. get_outline e get_script mostram as sinopses que já existem.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        scene: { type: 'string', description: 'Número da cena, como "12" ou "3A".' },
+        index: { type: 'integer', description: 'Índice do bloco do cabeçalho de cena.' },
+        text: { type: 'string' }
+      },
+      required: ['text']
+    }
+  },
+  {
+    name: 'get_notes',
+    description:
+      'Lê as notas (post-its) que o roteirista prendeu em linhas do roteiro. Cada nota traz o texto, a cor e o que ela quer dizer (yellow = Nota, blue = Pergunta, pink = Reescrever, green = Resolvido), o índice do bloco e o texto da linha, e o número da cena. loose = true quando a linha da nota foi apagada. ' +
+      'Para trabalhar as notas: leia com open_only, ajuste o roteiro com as ferramentas de edição e depois marque cada nota atendida como resolvida com update_note (color green), acrescentando ao texto o que foi feito. Uma pergunta (blue) pede resposta no texto da nota, não necessariamente uma mudança no roteiro. Não apague notas do roteirista.',
+    inputSchema: {
+      type: 'object',
+      properties: { open_only: { type: 'boolean', description: 'true deixa de fora as notas já resolvidas (verdes).' } }
+    }
+  },
+  {
+    name: 'add_note',
+    description:
+      'Prende uma nota numa linha do roteiro (block = índice do bloco, como em get_script). Use para comentar, sugerir ou perguntar sem mudar o texto. color: yellow (nota, padrão), blue (pergunta), pink (reescrever), green (resolvido). As notas aparecem na coluna de notas, à direita da página, e não saem no PDF.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        block: { type: 'integer' },
+        text: { type: 'string', description: 'Até 4000 caracteres.' },
+        color: { type: 'string', enum: ['yellow', 'blue', 'pink', 'green'] }
+      },
+      required: ['block', 'text']
+    }
+  },
+  {
+    name: 'update_note',
+    description:
+      'Muda o texto ou a cor de uma nota (id de get_notes). Para marcar como resolvida: color green, e acrescente ao texto, numa linha nova, o que foi feito (mantenha o texto original do roteirista).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        text: { type: 'string' },
+        color: { type: 'string', enum: ['yellow', 'blue', 'pink', 'green'] }
+      },
+      required: ['id']
+    }
+  },
+  {
+    name: 'delete_note',
+    description: 'Apaga uma nota. Use só quando o roteirista pedir; para encerrar uma nota, marque-a como resolvida (update_note, color green).',
+    inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] }
+  },
+  {
     name: 'save_script',
     description: 'Salva o roteiro no arquivo atual (se ainda não tem arquivo, mantém como rascunho).',
     inputSchema: { type: 'object', properties: {} }
@@ -452,7 +561,8 @@ async function handle(msg) {
         instructions:
           'Rottera é um editor de roteiros. Leia com get_script ou get_outline, edite com insert_blocks, insert_fountain, replace_blocks ou update_block. ' +
           'As edições aparecem na tela do roteirista na hora. Os índices de bloco mudam depois de inserir ou apagar, então releia antes de uma nova edição. ' +
-          'Escreva no idioma do roteiro e respeite o formato: cabeçalho de cena em maiúsculas (INT./EXT. LOCAL - HORA), personagem em maiúsculas, fala logo abaixo.'
+          'Escreva no idioma do roteiro e respeite o formato: cabeçalho de cena em maiúsculas (INT./EXT. LOCAL - HORA), personagem em maiúsculas, fala logo abaixo. ' +
+          'O roteirista deixa notas presas às linhas (get_notes). Quando ele pedir para trabalhar as notas, ajuste o roteiro e marque cada nota atendida como resolvida (update_note, color green) com uma linha dizendo o que mudou.'
       }
     case 'ping':
       return {}

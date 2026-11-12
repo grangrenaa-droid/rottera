@@ -117,7 +117,7 @@ check('no keyboard trap in the last ten stops', !trapped, JSON.stringify(lastTen
 // ---------------------------------------------------------------- dialog focus
 await js(`[...document.querySelectorAll('button')].find(b => b.textContent.trim().startsWith('Mais'))?.click()`)
 await sleep(200)
-await click('Conectar ao Claude')
+await click('Conectar a uma IA')
 await sleep(500)
 const inDialog = await js(`document.activeElement && document.activeElement.closest('dialog') !== null`)
 check('dialog: focus moves into the dialog when it opens', inDialog === true, String(inDialog))

@@ -71,7 +71,7 @@ const walk = parse(await runWalk(Number(process.env.NARRATOR_STEPS || '28')))
 // second part: a dialog. Open it through the page, then let Narrator read where focus lands.
 js(`[...document.querySelectorAll('button')].find(b => b.textContent.trim().startsWith('Mais'))?.click()`)
 await sleep(400)
-js(`[...document.querySelectorAll('button')].find(b => b.textContent.trim().startsWith('Conectar ao Claude'))?.click()`)
+js(`[...document.querySelectorAll('button')].find(b => b.textContent.trim().startsWith('Conectar a uma IA'))?.click()`)
 await sleep(900)
 const dialog = parse(await runWalk(6))
 

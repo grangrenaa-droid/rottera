@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { Block, Extras, TitlePage } from '../shared/types'
+import type { Block, Extras, TitlePage, Watermark, WatermarkStrength } from '../shared/types'
 import { emptyExtras } from '../shared/types'
+import { WATERMARK_MAX } from '../shared/scriptfile'
 import { TEMPLATES, type Template } from '../shared/templates'
 import { collectLists } from '../shared/smarttype'
 import { usageCounts } from '../shared/rename'
-import type { BackupInfo, ConnectInfo } from '../shared/api'
+import type { BackupInfo, ConnectInfo, CopyFolderInfo } from '../shared/api'
 import { MANUAL, searchManual, type ManualTopic } from '../shared/manual'
 
 function Modal(props: { title: string; onClose(): void; children: ReactNode; wide?: boolean }): JSX.Element {
@@ -50,6 +51,162 @@ export function TitleDialog(props: {
           </button>
         </div>
       </form>
+    </Modal>
+  )
+}
+
+export function WatermarkDialog(props: {
+  value: Watermark | undefined
+  onSave(w: Watermark): void
+  onClose(): void
+}): JSX.Element {
+  const [w, setW] = useState<Watermark>(props.value ?? { enabled: true, text: '', strength: 'medium' })
+  return (
+    <Modal title="Marca d’água" onClose={props.onClose}>
+      <form
+        method="dialog"
+        onSubmit={(e) => {
+          e.preventDefault()
+          props.onSave({ ...w, text: w.text.trim() })
+        }}
+      >
+        <p className="muted">
+          Um texto claro, na diagonal, em todas as páginas do PDF e da visualização de impressão. Fica salvo no
+          roteiro. Ex.: CONFIDENCIAL, RASCUNHO, seu nome.
+        </p>
+        <label className="check">
+          <input type="checkbox" checked={w.enabled} onChange={(e) => setW({ ...w, enabled: e.target.checked })} />
+          Usar marca d’água no PDF
+        </label>
+        <label htmlFor="wm-text">Texto</label>
+        <input
+          id="wm-text"
+          value={w.text}
+          maxLength={WATERMARK_MAX}
+          placeholder="CONFIDENCIAL"
+          onChange={(e) => setW({ ...w, text: e.target.value })}
+        />
+        <label htmlFor="wm-strength">Intensidade</label>
+        <select
+          id="wm-strength"
+          value={w.strength}
+          onChange={(e) => setW({ ...w, strength: e.target.value as WatermarkStrength })}
+        >
+          <option value="light">Leve</option>
+          <option value="medium">Média</option>
+          <option value="strong">Forte</option>
+        </select>
+        <div className="row end">
+          <button type="button" className="btn secondary" onClick={props.onClose}>
+            Cancelar
+          </button>
+          <button type="submit" className="btn primary">
+            Salvar
+          </button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+/** The second folder every saved script is copied to. The choice is the computer's, for every script. */
+export function CopyFolderDialog(props: { onChanged(info: CopyFolderInfo): void; onClose(): void }): JSX.Element {
+  const [info, setInfo] = useState<CopyFolderInfo | null>(null)
+  useEffect(() => {
+    void window.api.copyFolderGet().then(setInfo)
+  }, [])
+  const set = (p: Promise<CopyFolderInfo>): void =>
+    void p.then((i) => {
+      setInfo(i)
+      props.onChanged(i)
+    })
+  const when = (iso: string): string => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  return (
+    <Modal title="Cópia em outra pasta" onClose={props.onClose}>
+      <p className="muted">
+        Toda vez que um roteiro é salvo, o Rottera grava também uma cópia numa pasta que você escolhe: uma pasta do OneDrive,
+        Google Drive ou Dropbox, ou um pen drive. Se este computador tiver algum problema, o roteiro está em outro lugar.
+      </p>
+      <p>
+        Pasta: <b className="copy-dir">{info === null ? '…' : info.dir ?? 'nenhuma'}</b>
+      </p>
+      {info?.last && (
+        <p role="status" className={info.last.ok ? 'muted' : 'copy-failed'}>
+          {info.last.ok ? `Última cópia às ${when(info.last.at)}.` : `A última cópia não foi feita (${when(info.last.at)}): ${info.last.error}.`}
+        </p>
+      )}
+      <p className="muted small">
+        A cópia tem o mesmo nome do arquivo e é trocada a cada salvamento. Rascunhos ainda sem arquivo não são copiados. Vale
+        para todos os roteiros deste computador. As versões anteriores continuam guardadas como sempre.
+      </p>
+      <div className="row end">
+        {info?.dir && (
+          <button type="button" className="btn ghost" onClick={() => set(window.api.copyFolderClear())}>
+            Parar de copiar
+          </button>
+        )}
+        <button type="button" className="btn secondary" onClick={() => set(window.api.copyFolderChoose())}>
+          {info?.dir ? 'Trocar pasta…' : 'Escolher pasta…'}
+        </button>
+        <button type="button" className="btn primary" onClick={props.onClose}>
+          Fechar
+        </button>
+      </div>
+    </Modal>
+  )
+}
+
+export type ExportChoice = 'pdf' | 'docx' | 'html' | 'fdx' | 'fountain' | 'storyboard-pdf' | 'lightmap-pdf' | 'characters-pdf'
+
+/** Everything the app can export, in one place (Mais → Exportar…). */
+export function ExportDialog(props: {
+  frames: number
+  maps: number
+  onExport(format: ExportChoice): void
+  onPreview(): void
+  onReports(): void
+  onShooting(): void
+  onClose(): void
+}): JSX.Element {
+  const item = (label: string, text: string, onClick: () => void, disabled = false, hint = ''): JSX.Element => (
+    <li key={label}>
+      <button className="template" disabled={disabled} onClick={onClick}>
+        <strong>
+          {label}
+          {hint && <span className="muted export-hint"> · {hint}</span>}
+        </strong>
+        <span className="muted">{text}</span>
+      </button>
+    </li>
+  )
+  const go = (f: ExportChoice) => () => props.onExport(f)
+  return (
+    <Modal title="Exportar" onClose={props.onClose} wide>
+      <h3 className="export-group">O roteiro</h3>
+      <ul className="templates">
+        {item('PDF', 'Para ler e imprimir: página de título, roteiro, fichas, storyboard e mapas de luz, na ordem.', go('pdf'), false, 'Ctrl+P')}
+        {item('Visualizar impressão', 'Abre numa janela o mesmo PDF, sem salvar nada.', props.onPreview, false, 'Ctrl+Shift+P')}
+        {item('Word (DOCX)', 'Para continuar no Word: um estilo para cada elemento do roteiro.', go('docx'))}
+        {item('Página da web (HTML)', 'As páginas do PDF num arquivo que abre em qualquer navegador.', go('html'))}
+        {item('FDX', 'Formato de roteiro que o Final Draft e outros programas abrem.', go('fdx'))}
+        {item('Fountain', 'Texto simples de roteiro; vai com as notas e as sinopses.', go('fountain'))}
+      </ul>
+      <h3 className="export-group">Só uma parte, em PDF</h3>
+      <ul className="templates">
+        {item('Storyboard', 'Os quadros, na ordem do roteiro.', go('storyboard-pdf'), props.frames === 0, props.frames === 0 ? 'nenhum quadro ainda' : '')}
+        {item('Mapas de luz', 'A planta de cada set, com câmeras, luzes e notas.', go('lightmap-pdf'), props.maps === 0, props.maps === 0 ? 'nenhum mapa ainda' : '')}
+        {item('Fichas de personagem', 'A apresentação de cada personagem que tem ficha.', go('characters-pdf'))}
+      </ul>
+      <h3 className="export-group">Relatórios e produção</h3>
+      <ul className="templates">
+        {item('Relatórios', 'Lista de cenas, escaleta, personagens, locais e outros: cada um em PDF ou CSV.', props.onReports)}
+        {item('Plano de filmagem e ordem do dia', 'Na aba Filmagem: o plano inteiro ou a ordem de cada dia, em PDF.', props.onShooting)}
+      </ul>
+      <div className="row end">
+        <button className="btn secondary" onClick={props.onClose}>
+          Fechar
+        </button>
+      </div>
     </Modal>
   )
 }
@@ -226,6 +383,8 @@ export function SmartTypeDialog(props: {
 
 export function ConnectDialog(props: { onClose(): void; onCopied(): void }): JSX.Element {
   const [info, setInfo] = useState<ConnectInfo | null>(null)
+  const [clientId, setClientId] = useState('claude-code')
+  const client = info?.clients.find((c) => c.id === clientId) ?? info?.clients[0]
 
   useEffect(() => {
     void window.api.connectInfo().then(setInfo)
@@ -237,15 +396,16 @@ export function ConnectDialog(props: { onClose(): void; onCopied(): void }): JSX
   }
 
   return (
-    <Modal title="Conectar ao Claude" onClose={props.onClose} wide>
-      {!info ? (
+    <Modal title="Conectar a uma IA" onClose={props.onClose} wide>
+      {!info || !client ? (
         <p className="muted">Carregando…</p>
       ) : (
         <>
           <p>
-            Com a conexão ligada, o Claude lê o roteiro aberto aqui e escreve nele: insere cenas, reescreve trechos,
+            Com a conexão ligada, a IA lê o roteiro aberto aqui e escreve nele: insere cenas, reescreve trechos,
             move cenas, procura e troca texto, consulta relatórios e preenche o Beat Board. Cada mudança aparece na
-            hora e pode ser desfeita com Ctrl+Z. Nenhuma conta ou e-mail é necessário.
+            hora e pode ser desfeita com Ctrl+Z. Funciona com qualquer app de IA que aceite servidores MCP locais.
+            Nenhuma conta ou e-mail é pedido pelo Rottera.
           </p>
           <label className="check">
             <input
@@ -253,23 +413,30 @@ export function ConnectDialog(props: { onClose(): void; onCopied(): void }): JSX
               checked={info.enabled}
               onChange={(e) => void window.api.connectSet(e.target.checked).then(setInfo)}
             />
-            Permitir que o Claude edite o roteiro (somente neste computador)
+            Permitir que a IA edite o roteiro (somente neste computador)
           </label>
-          <h3>Claude Code</h3>
-          <p className="muted">Cole no terminal uma vez:</p>
-          <pre className="code">{info.claudeCodeCommand}</pre>
-          <button className="btn secondary" onClick={() => void copy(info.claudeCodeCommand)}>
-            Copiar comando
+          <label htmlFor="ai-client">Aplicativo de IA</label>
+          <select id="ai-client" value={client.id} onChange={(e) => setClientId(e.target.value)}>
+            {info.clients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <p className="muted">{client.where}</p>
+          <pre className="code">{client.snippet}</pre>
+          <button className="btn secondary" onClick={() => void copy(client.snippet)}>
+            {client.kind === 'command' ? 'Copiar comando' : 'Copiar configuração'}
           </button>
-          <h3>Claude Desktop</h3>
-          <p className="muted">Acrescente em claude_desktop_config.json e reinicie o Claude:</p>
-          <pre className="code">{info.desktopConfig}</pre>
-          <button className="btn secondary" onClick={() => void copy(info.desktopConfig)}>
-            Copiar configuração
-          </button>
+          {client.kind === 'config' && (
+            <p className="muted">
+              Se o arquivo já tiver outros servidores, acrescente só o trecho “rottera” dentro da lista que já existe.
+            </p>
+          )}
           <p className="muted">
-            A ponte só escuta em 127.0.0.1 e exige uma chave que muda toda vez que o Rottera abre. Mantenha o
-            Rottera aberto enquanto conversa com o Claude.
+            O ChatGPT no navegador e no app de desktop só aceita servidores remotos; para usar modelos da OpenAI,
+            escolha o Codex. A ponte só escuta em 127.0.0.1 e exige uma chave que muda toda vez que o Rottera abre.
+            Mantenha o Rottera aberto enquanto conversa com a IA.
           </p>
         </>
       )}

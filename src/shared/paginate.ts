@@ -7,6 +7,14 @@ export const PAPER: Record<Paper, { width: number; height: number; lines: number
   a4: { width: 8.27, height: 11.69, lines: 58 }
 }
 
+/**
+ * From this many lines (blocks) on, a script counts as long: page breaks, the navigator and the page count follow
+ * the text a moment after typing stops, instead of at every key. About 60 pages.
+ */
+export const LONG_SCRIPT_BLOCKS = 400
+/** How long typing must stop before a long script is paginated again. */
+export const LONG_SCRIPT_DELAY = 150
+
 /** Lines per page on letter paper (kept for callers that do not choose a paper). */
 export const PAGE_LINES = PAPER.letter.lines
 
@@ -41,7 +49,7 @@ export interface PageLine {
   left: number
   width: number
   align?: 'right'
-  /** Index of the source block, or -1 for generated lines (MORE, CONT'D, blanks). */
+  /** Index of the source block, or -1 for generated lines (CONTINUA, CONT., blanks). */
   block: number
   /** Printed on the same row as the previous line (right column of a dual dialogue). */
   sameRow?: boolean
@@ -53,7 +61,22 @@ export interface Pagination {
   blockPage: number[]
 }
 
+/** Wrapped lines by width and text. Typing changes one line; the other thousands come from here. */
+const WRAP_CACHE = new Map<string, readonly string[]>()
+const WRAP_CACHE_MAX = 60000
+
+/** Splits a text into lines of at most `width` characters. The result is shared: do not change it. */
 export function wrap(text: string, width: number): string[] {
+  const key = `${width}|${text}`
+  const hit = WRAP_CACHE.get(key)
+  if (hit) return hit as string[]
+  const out = Object.freeze(wrapLines(text, width))
+  if (WRAP_CACHE.size >= WRAP_CACHE_MAX) WRAP_CACHE.clear()
+  WRAP_CACHE.set(key, out)
+  return out as string[]
+}
+
+function wrapLines(text: string, width: number): string[] {
   const out: string[] = []
   for (const para of text.split('\n')) {
     const words = para.split(/\s+/).filter(Boolean)
@@ -211,11 +234,13 @@ export function paginate(blocks: Block[], paper: Paper = 'letter'): Pagination {
         if (first) blockPage[i] = pages.length - 1
         blank(before)
         for (const l of lines.slice(0, take)) push(l, b.kind, i)
-        if (b.kind === 'dialogue') push('(MORE)', 'character', -1)
+        // the Brazilian marks for a speech that goes on to the next page: (CONTINUA) here, NAME (CONT.) there
+        if (b.kind === 'dialogue') push('(CONTINUA)', 'character', -1)
         lines = lines.slice(take)
         newPage()
         if (b.kind === 'dialogue' && lastCharacter) {
-          const name = /\(CONT'D\)$/.test(lastCharacter) ? lastCharacter : `${lastCharacter} (CONT'D)`
+          // a cue the writer already marked as continuing ("ANA (CONT.)", "ANA (CONT'D)") is not marked twice
+          const name = /\((CONT\.|CONT'D|CONT’D|CONTINUA)\)$/i.test(lastCharacter) ? lastCharacter : `${lastCharacter} (CONT.)`
           push(name, 'character', -1)
         }
         first = false

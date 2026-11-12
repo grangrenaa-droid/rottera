@@ -1,8 +1,8 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { Beat, Block, Board, CharacterSheet, Extras, Kind, LightMap, Paper, RevisionState, Script, Storyboard, TitlePage } from '../shared/types'
+import type { Beat, Block, Board, CharacterSheet, Extras, Kind, LightMap, Note, Paper, Production, RevisionState, Script, Storyboard, TableRead, TitlePage, Watermark } from '../shared/types'
 import { emptyScript, emptyStoryboard } from '../shared/types'
 import { LABELS } from '../shared/elements'
-import { paginate, type PageLine } from '../shared/paginate'
+import { LONG_SCRIPT_BLOCKS, LONG_SCRIPT_DELAY, paginate, type PageLine } from '../shared/paginate'
 import type { MenuAction, RecentItem, SessionInfo } from '../shared/api'
 import { folderOf, whenOpened } from '../shared/recent'
 import { isDark, toggleTheme, type Theme } from '../shared/theme'
@@ -10,6 +10,14 @@ import { lockScenes, moveSceneTo, sceneNumbers, sceneRanges, unlockScenes } from
 import { renameCharacter, renameLocation } from '../shared/rename'
 import { beatLinks, sendBeats } from '../shared/beats'
 import { characterKey } from '../shared/characters'
+import { groupNotes, noteMarks } from '../shared/notes'
+import { newId } from '../shared/structures'
+import { NotesPanel } from './Notes'
+import { ReadBar } from './ReadBar'
+import { emptyProduction, sceneInfo } from '../shared/production'
+import { printable, type Report } from '../shared/reports'
+import { SYNOPSIS_MAX, cleanSynopsis } from '../shared/scriptfile'
+import { ProductionView, type SceneLinks } from './Production'
 import { REVISIONS, revisionLabel } from '../shared/revisions'
 import type { Template } from '../shared/templates'
 import { Editor, ELEMENT_OPTIONS, type CaretInfo, type EditorHandle } from './Editor'
@@ -18,12 +26,12 @@ import { StoryboardView } from './Storyboard'
 import { ScriptPage } from './ScriptPage'
 import { LightMapView } from './LightMap'
 import { ReportsView } from './Reports'
-import { ConnectDialog, DiagnosticsDialog, ManualDialog, SmartTypeDialog, TemplatesDialog, TitleDialog, VersionsDialog } from './Dialogs'
+import { ConnectDialog, CopyFolderDialog, DiagnosticsDialog, ExportDialog, ManualDialog, SmartTypeDialog, TemplatesDialog, TitleDialog, VersionsDialog, WatermarkDialog } from './Dialogs'
 import { createBridgeHandler } from './bridgeHandler'
 
 type Saved = 'saved' | 'draft' | 'saving' | 'unsaved' | 'error'
-type Panel = 'script' | 'board' | 'storyboard' | 'lightmap' | 'reports'
-type DialogName = null | 'title' | 'templates' | 'smarttype' | 'connect' | 'versions' | 'manual' | 'diagnostics'
+type Panel = 'script' | 'board' | 'storyboard' | 'lightmap' | 'reports' | 'shooting'
+type DialogName = null | 'title' | 'templates' | 'smarttype' | 'connect' | 'versions' | 'manual' | 'diagnostics' | 'watermark' | 'copyfolder' | 'export'
 
 const SAVE_LABEL: Record<Saved, string> = {
   saved: 'Salvo',
@@ -92,16 +100,42 @@ function isBrazilian(): boolean {
   }
 }
 
-/** True while the window is narrow (or heavily zoomed): the toolbar moves its secondary actions into "Mais". */
-function useNarrow(maxWidth: number): boolean {
-  const [narrow, setNarrow] = useState(() => window.matchMedia(`(max-width: ${maxWidth}px)`).matches)
-  useEffect(() => {
-    const m = window.matchMedia(`(max-width: ${maxWidth}px)`)
-    const on = (): void => setNarrow(m.matches)
-    m.addEventListener('change', on)
-    return () => m.removeEventListener('change', on)
-  }, [maxWidth])
-  return narrow
+/** Toolbar buttons that move into "Mais" when the bar would need a second row, in the order they go. */
+const FOLD_ORDER = ['theme', 'dual', 'preview', 'notes', 'nav', 'find', 'pdf'] as const
+type FoldKey = (typeof FOLD_ORDER)[number]
+
+/**
+ * Keeps the toolbar to one row by moving buttons into "Mais", one at a time, while they do not fit. Each button's
+ * width is remembered from when it was on the bar, so the result depends only on the bar's width and cannot flip
+ * back and forth. Every control is followed by an 8px gap (margin in .toolbar-main, gap and reserve in .toolbar-end).
+ */
+function useToolbarFold(): { ref: (el: HTMLDivElement | null) => void; folded: (k: FoldKey) => boolean } {
+  const [count, setCount] = useState(0)
+  const widths = useRef(new Map<string, number>())
+  const observer = useRef<ResizeObserver | null>(null)
+  const ref = useCallback((bar: HTMLDivElement | null) => {
+    observer.current?.disconnect()
+    if (!bar) return
+    const measure = (): void => {
+      const s = getComputedStyle(bar)
+      const room = bar.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight)
+      let need = 0
+      for (const el of bar.querySelectorAll<HTMLElement>('.toolbar-main > *, .toolbar-end > *')) {
+        if (getComputedStyle(el).position === 'absolute') continue // the hidden label of the element list
+        const w = el.getBoundingClientRect().width + 8
+        if (el.dataset.fold) widths.current.set(el.dataset.fold, w)
+        else need += w
+      }
+      for (const k of FOLD_ORDER) need += widths.current.get(k) ?? 0
+      let n = 0
+      while (n < FOLD_ORDER.length && need > room + 0.5) need -= widths.current.get(FOLD_ORDER[n++]) ?? 0
+      setCount((p) => (p === n ? p : n))
+    }
+    observer.current = new ResizeObserver(measure)
+    observer.current.observe(bar)
+  }, [])
+  const folded = useCallback((k: FoldKey) => FOLD_ORDER.indexOf(k) < count, [count])
+  return { ref, folded }
 }
 
 function baseName(path: string | null): string {
@@ -141,6 +175,19 @@ function Popover(props: { label: string; children: ReactNode }): JSX.Element {
   )
 }
 
+const NO_LINKS: SceneLinks = { frames: 0, maps: [] }
+
+/** Drops the scene link of the entries whose scene label changed, so they are linked again by the new label. */
+function unlinkChanged<T extends { id: string; scene: string; sid?: string }>(prev: T[], next: T[]): T[] {
+  const before = new Map(prev.map((x) => [x.id, x.scene]))
+  return next.map((x) => {
+    if (!x.sid || !before.has(x.id) || before.get(x.id) === x.scene) return x
+    const copy = { ...x }
+    delete copy.sid
+    return copy
+  })
+}
+
 /** One row of the scene navigator. Memoised on plain values so that typing in a long script does not re-render thousands of rows. */
 const SceneRow = memo(function SceneRow(props: {
   n: number
@@ -151,16 +198,29 @@ const SceneRow = memo(function SceneRow(props: {
   active: boolean
   last: boolean
   dragging: boolean
+  /** Storyboard frames and light maps of this scene (see the scene links in App). */
+  frames: number
+  maps: number
+  firstMap: string | null
+  /** The scene's synopsis, and whether it is being edited here. */
+  syn: string
+  editingSyn: boolean
+  onEditSyn(index: number): void
+  /** null = cancelled. */
+  onSaveSyn(index: number, text: string | null): void
   onFocusBlock(index: number): void
   onMove(from: number, to: number): void
   onDragStart(n: number | null): void
   onDropOn(n: number): void
+  onOpenStoryboard(label: string): void
+  onOpenMap(id: string): void
 }): JSX.Element {
-  const { n, index, label, text, page, active, last, dragging } = props
+  const { n, index, label, text, page, active, last, dragging, frames, maps, firstMap, syn, editingSyn } = props
+  const cancelled = useRef(false)
   return (
     <li
       className={dragging ? 'dragging' : undefined}
-      draggable
+      draggable={!editingSyn}
       onDragStart={() => props.onDragStart(n)}
       onDragEnd={() => props.onDragStart(null)}
       onDragOver={(e) => e.preventDefault()}
@@ -184,6 +244,53 @@ const SceneRow = memo(function SceneRow(props: {
           ↓
         </button>
       </span>
+      {editingSyn ? (
+        <textarea
+          className="scene-syn-edit"
+          aria-label={`Sinopse da cena ${label}`}
+          defaultValue={syn}
+          maxLength={SYNOPSIS_MAX}
+          rows={2}
+          placeholder="O que acontece nesta cena…"
+          autoFocus
+          onFocus={() => {
+            cancelled.current = false
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              e.currentTarget.blur()
+            } else if (e.key === 'Escape') {
+              e.preventDefault()
+              cancelled.current = true
+              e.currentTarget.blur()
+            }
+          }}
+          onBlur={(e) => props.onSaveSyn(index, cancelled.current ? null : e.target.value)}
+        />
+      ) : syn ? (
+        <button className="scene-syn" title="Sinopse (não sai no PDF). Clique para editar." aria-label={`Sinopse da cena ${label}: ${syn}. Editar`} onClick={() => props.onEditSyn(index)}>
+          {syn}
+        </button>
+      ) : (
+        <button className={active ? 'link scene-syn-add on' : 'link scene-syn-add'} aria-label={`Escrever sinopse da cena ${label}`} onClick={() => props.onEditSyn(index)}>
+          + sinopse
+        </button>
+      )}
+      {(frames > 0 || maps > 0) && (
+        <span className="scene-links">
+          {frames > 0 && (
+            <button className="link" aria-label={`Storyboard da cena ${label}: ${frames} ${frames === 1 ? 'quadro' : 'quadros'}`} onClick={() => props.onOpenStoryboard(label)}>
+              {frames} {frames === 1 ? 'quadro' : 'quadros'}
+            </button>
+          )}
+          {maps > 0 && firstMap && (
+            <button className="link" aria-label={`Mapa de luz da cena ${label}`} onClick={() => props.onOpenMap(firstMap)}>
+              {maps} {maps === 1 ? 'mapa de luz' : 'mapas de luz'}
+            </button>
+          )}
+        </span>
+      )}
     </li>
   )
 })
@@ -206,6 +313,27 @@ export function App(): JSX.Element {
   const [revision, setRevision] = useState<RevisionState>({ mode: false, color: 'azul' })
   const [scenesLocked, setScenesLocked] = useState(false)
   const [numberScenes, setNumberScenes] = useState(false)
+  const [watermark, setWatermark] = useState<Watermark | undefined>(undefined)
+  const [notes, setNotesState] = useState<Note[]>([])
+  const [production, setProductionState] = useState<Production>(emptyProduction())
+  /** Block index of the scene heading whose synopsis is being edited in the navigator. */
+  const [synEdit, setSynEdit] = useState<number | null>(null)
+  const [showSynopsis, setShowSynopsis] = useState(() => {
+    try {
+      return localStorage.getItem('showSynopsis') !== 'false'
+    } catch {
+      return true
+    }
+  })
+  /** Where the storyboard or the light map tab opens when reached from a scene. */
+  const [jump, setJump] = useState<{ scene?: string; map?: string }>({})
+  const [notesOpen, setNotesOpen] = useState(false)
+  const [readOpen, setReadOpen] = useState(false)
+  /** Why the last copy to the copy folder failed, or null. */
+  const [copyFailed, setCopyFailed] = useState<string | null>(null)
+  const copyFailedRef = useRef<string | null>(null)
+  const [tableRead, setTableReadState] = useState<TableRead | undefined>(undefined)
+  const [freshNote, setFreshNote] = useState<string | null>(null)
   const [path, setPath] = useState<string | null>(null)
   const [saved, setSaved] = useState<Saved>('saved')
   const savedRef = useRef<Saved>('saved')
@@ -222,7 +350,37 @@ export function App(): JSX.Element {
   const [ready, setReady] = useState(0)
   const [claudeActive, setClaudeActive] = useState(false)
   const [dragScene, setDragScene] = useState<number | null>(null)
-  const narrow = useNarrow(1000)
+  const fold = useToolbarFold()
+  const folded = fold.folded
+  // keeps the first toolbar row free under Salvar/Exportar, which sit at the top right (see .toolbar-reserve)
+  const [toolbarEnd, setToolbarEnd] = useState({ w: 0, h: 0 })
+  const endObserver = useRef<ResizeObserver | null>(null)
+  const toolbarEndRef = useCallback((el: HTMLDivElement | null) => {
+    endObserver.current?.disconnect()
+    if (!el) return
+    // only a real change re-renders: the whole app renders again, which is slow on a long script
+    endObserver.current = new ResizeObserver(() => {
+      const w = el.offsetWidth
+      const h = el.offsetHeight
+      setToolbarEnd((p) => (p.w === w && p.h === h ? p : { w, h }))
+    })
+    endObserver.current.observe(el)
+  }, [])
+
+  // with the notes column open the page may not fit beside it: the page is drawn smaller instead of scrolling sideways
+  const fitObserver = useRef<ResizeObserver | null>(null)
+  const canvasRef = useCallback((el: HTMLElement | null) => {
+    fitObserver.current?.disconnect()
+    if (!el) return
+    fitObserver.current = new ResizeObserver(() => {
+      const s = getComputedStyle(el)
+      const room = el.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight)
+      // 8.5 in = 816 px; never below 70 %, where the script would get hard to read
+      const fit = Math.max(0.7, Math.min(1, room / 816))
+      el.style.setProperty('--sheet-fit', fit.toFixed(3))
+    })
+    fitObserver.current.observe(el)
+  }, [])
 
   const handle = useRef<EditorHandle | null>(null)
   const scriptRef = useRef<Script>(emptyScript())
@@ -230,7 +388,7 @@ export function App(): JSX.Element {
   const timer = useRef<number | null>(null)
   const claudeTimer = useRef<number | null>(null)
 
-  scriptRef.current = { titlePage, blocks, board, storyboard, lightMaps, paper, characters, extras, revision, scenesLocked, numberScenes }
+  scriptRef.current = { titlePage, blocks, board, storyboard, lightMaps, paper, characters, extras, revision, scenesLocked, numberScenes, watermark, notes, production, tableRead }
   pathRef.current = path
 
   // ------------------------------------------------------------ theme
@@ -315,6 +473,12 @@ export function App(): JSX.Element {
         pathRef.current = p
         await window.api.draftClear()
         setSaved('saved')
+        // the copy folder: say once when copying stops working, and again when it works
+        const c = await window.api.copyFolderGet()
+        const failed = c.dir && c.last && !c.last.ok ? c.last.error ?? 'erro desconhecido' : null
+        if (failed && !copyFailedRef.current) flash(`Salvo, mas a cópia em ${c.dir} não foi feita: ${failed}.`)
+        copyFailedRef.current = failed
+        setCopyFailed(failed)
       } else {
         setSaved('unsaved')
       }
@@ -341,10 +505,18 @@ export function App(): JSX.Element {
     }
   }, [saveNow])
 
+  // a long script: the navigator, the page count and the other panels follow the text when typing stops
+  const blocksTimer = useRef<number | null>(null)
   const onChange = useCallback(
     (b: Block[]) => {
-      setBlocks(b)
       scheduleAutosave()
+      if (blocksTimer.current !== null) window.clearTimeout(blocksTimer.current)
+      blocksTimer.current = null
+      if (b.length < LONG_SCRIPT_BLOCKS) return setBlocks(b)
+      blocksTimer.current = window.setTimeout(() => {
+        blocksTimer.current = null
+        setBlocks(b)
+      }, LONG_SCRIPT_DELAY)
     },
     [scheduleAutosave]
   )
@@ -358,7 +530,8 @@ export function App(): JSX.Element {
     [scheduleAutosave]
   )
 
-  const setStoryboard = useCallback(
+  // writes without touching the scene links (used by the scene-link sync below)
+  const putStoryboard = useCallback(
     (sb: Storyboard) => {
       scriptRef.current = { ...scriptRef.current, storyboard: sb }
       setStoryboardState(sb)
@@ -367,10 +540,44 @@ export function App(): JSX.Element {
     [scheduleAutosave]
   )
 
-  const setLightMaps = useCallback(
+  const putLightMaps = useCallback(
     (maps: LightMap[]) => {
       scriptRef.current = { ...scriptRef.current, lightMaps: maps }
       setLightMapsState(maps)
+      scheduleAutosave()
+    },
+    [scheduleAutosave]
+  )
+
+  // edits from the screen or the AI: a frame or map whose scene was changed by hand is linked again by its new label
+  const setStoryboard = useCallback(
+    (sb: Storyboard) => putStoryboard({ ...sb, frames: unlinkChanged(scriptRef.current.storyboard?.frames ?? [], sb.frames) }),
+    [putStoryboard]
+  )
+
+  const setLightMaps = useCallback(
+    (maps: LightMap[]) => putLightMaps(unlinkChanged(scriptRef.current.lightMaps ?? [], maps)),
+    [putLightMaps]
+  )
+
+  const setTableRead = useCallback(
+    (t: TableRead) => {
+      scriptRef.current = { ...scriptRef.current, tableRead: t }
+      setTableReadState(t)
+      scheduleAutosave()
+    },
+    [scheduleAutosave]
+  )
+  /** The line being read aloud: highlighted and kept in sight. */
+  const onReadLine = useCallback((block: number | null) => {
+    handle.current?.setView({ reading: block })
+    if (block !== null) handle.current?.revealBlock(block)
+  }, [])
+
+  const setProduction = useCallback(
+    (p: Production) => {
+      scriptRef.current = { ...scriptRef.current, production: p }
+      setProductionState(p)
       scheduleAutosave()
     },
     [scheduleAutosave]
@@ -385,9 +592,21 @@ export function App(): JSX.Element {
     [scheduleAutosave]
   )
 
+  const setNotes = useCallback(
+    (next: Note[]) => {
+      scriptRef.current = { ...scriptRef.current, notes: next }
+      setNotesState(next)
+      scheduleAutosave()
+    },
+    [scheduleAutosave]
+  )
+
   // ------------------------------------------------------------ open, new, import
   const openScript = useCallback((s: Script, p: string | null) => {
     handle.current = null
+    // an update of the script that was open must not land on this one
+    if (blocksTimer.current !== null) window.clearTimeout(blocksTimer.current)
+    blocksTimer.current = null
     setInitial(s.blocks)
     setBlocks(s.blocks)
     setTitlePage(s.titlePage)
@@ -401,6 +620,13 @@ export function App(): JSX.Element {
     setRevision(s.revision ?? { mode: false, color: 'azul' })
     setScenesLocked(s.scenesLocked === true)
     setNumberScenes(s.numberScenes === true)
+    setWatermark(s.watermark)
+    setNotesState(s.notes ?? [])
+    setProductionState(s.production ?? emptyProduction())
+    setTableReadState(s.tableRead)
+    setReadOpen(false)
+    setJump({})
+    setFreshNote(null)
     setPath(p)
     pathRef.current = p
     setSaved('saved')
@@ -511,7 +737,7 @@ export function App(): JSX.Element {
   }, [])
 
   const doExport = useCallback(
-    async (format: 'pdf' | 'storyboard-pdf' | 'lightmap-pdf' | 'characters-pdf' | 'fdx' | 'fountain') => {
+    async (format: 'pdf' | 'storyboard-pdf' | 'lightmap-pdf' | 'characters-pdf' | 'fdx' | 'fountain' | 'docx' | 'html') => {
       try {
         const s = { ...scriptRef.current, blocks: handle.current?.getBlocks() ?? scriptRef.current.blocks }
         const p = await window.api.exportFile(format, s, s.titlePage.title || baseName(pathRef.current) || 'Sem título')
@@ -541,7 +767,8 @@ export function App(): JSX.Element {
   }, [view, saveNow, refreshHome])
 
   // ------------------------------------------------------------ editor settings
-  const onCaret = useCallback((c: CaretInfo) => setCaret(c), [])
+  // the caret moves at every key: the app redraws only when its line or element type changes
+  const onCaret = useCallback((c: CaretInfo) => setCaret((p) => (p.block === c.block && p.kind === c.kind && p.dual === c.dual ? p : c)), [])
   const onReady = useCallback((h: EditorHandle) => {
     handle.current = h
     setReady((n) => n + 1)
@@ -556,6 +783,65 @@ export function App(): JSX.Element {
       paper
     })
   }, [numberScenes, scenesLocked, revision, paper, ready, docKey])
+
+  // ------------------------------------------------------------ synopses
+  useEffect(() => {
+    handle.current?.setView({ showSynopsis })
+    try {
+      localStorage.setItem('showSynopsis', String(showSynopsis))
+    } catch {
+      /* ignore */
+    }
+  }, [showSynopsis, ready, docKey])
+  const saveSynopsis = useCallback((index: number, text: string | null) => {
+    if (text !== null) handle.current?.setSynopsis(index, cleanSynopsis(text))
+    setSynEdit(null)
+  }, [])
+  /** Opens the synopsis of a scene for editing, in the navigator. */
+  const editSynopsis = useCallback((index: number) => {
+    setPanel('script')
+    setNavigator(true)
+    setSynEdit(index)
+  }, [])
+  // a click on the synopsis line in the text
+  useEffect(() => {
+    const on = (e: Event): void => editSynopsis((e as CustomEvent<number>).detail)
+    window.addEventListener('rottera:edit-synopsis', on)
+    return () => window.removeEventListener('rottera:edit-synopsis', on)
+  }, [editSynopsis])
+
+  // ------------------------------------------------------------ notes
+  const marks = useMemo(() => noteMarks(blocks, notes), [blocks, notes])
+  const marksKey = JSON.stringify(marks)
+  useEffect(() => {
+    handle.current?.setView({ notes: marks })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marksKey, ready, docKey])
+  const noteGroups = useMemo(() => (notesOpen ? groupNotes(blocks, notes) : { groups: [], loose: [] }), [notesOpen, blocks, notes])
+
+  /** A new note on the caret's line; opens the notes column and puts the cursor in it. */
+  const addNote = useCallback(() => {
+    if (view !== 'editor') return
+    const anchor = handle.current?.anchorAtCaret() ?? null
+    if (!anchor) return
+    const note: Note = { id: newId('note'), text: '', color: 'yellow', anchor }
+    setNotes([...(scriptRef.current.notes ?? []), note])
+    setPanel('script')
+    setNotesOpen(true)
+    setFreshNote(note.id)
+  }, [view, setNotes])
+  const updateNote = useCallback(
+    (id: string, patch: Partial<Note>) => setNotes((scriptRef.current.notes ?? []).map((n) => (n.id === id ? { ...n, ...patch } : n))),
+    [setNotes]
+  )
+  const deleteNote = useCallback((id: string) => setNotes((scriptRef.current.notes ?? []).filter((n) => n.id !== id)), [setNotes])
+  const pinNote = useCallback(
+    (id: string) => {
+      const anchor = handle.current?.anchorAtCaret() ?? null
+      if (anchor) updateNote(id, { anchor })
+    },
+    [updateNote]
+  )
 
   // ------------------------------------------------------------ find
   const openFind = useCallback(() => {
@@ -701,11 +987,28 @@ export function App(): JSX.Element {
         case 'preview-pdf': return void doPreview()
         case 'export-fdx': return void doExport('fdx')
         case 'export-fountain': return void doExport('fountain')
+        case 'export-docx': return void doExport('docx')
+        case 'export-html': return void doExport('html')
         case 'title-page': return setDialog('title')
+        case 'watermark': return setDialog('watermark')
         case 'versions': return handle.current ? setDialog('versions') : undefined
+        case 'copy-folder': return setDialog('copyfolder')
         case 'manual': return setDialog('manual')
         case 'diagnostics': return setDialog('diagnostics')
         case 'toggle-navigator': return setNavigator((v) => !v)
+        case 'toggle-notes': return setNotesOpen((v) => !v)
+        case 'toggle-synopsis': return setShowSynopsis((v) => !v)
+        case 'read-aloud':
+          setPanel('script')
+          return setReadOpen((v) => !v)
+        case 'edit-synopsis': {
+          const bs = handle.current?.getBlocks() ?? []
+          let i = Math.min(handle.current?.selection().block ?? 0, bs.length - 1)
+          while (i > 0 && bs[i]?.kind !== 'scene_heading') i--
+          if (bs[i]?.kind === 'scene_heading') editSynopsis(i)
+          return
+        }
+        case 'new-note': return addNote()
         case 'theme-auto': return setTheme('auto')
         case 'theme-light': return setTheme('light')
         case 'theme-night': return setTheme('night')
@@ -721,10 +1024,11 @@ export function App(): JSX.Element {
         case 'export-characters': return void doExport('characters-pdf')
         case 'export-storyboard': return void doExport('storyboard-pdf')
         case 'view-reports': return setPanel('reports')
+        case 'view-shooting': return setPanel('shooting')
         case 'claude': return setDialog('connect')
       }
     })
-  }, [doNew, doOpen, saveNow, doImport, doExport, doPreview, goHome, openFind])
+  }, [doNew, doOpen, saveNow, doImport, doExport, doPreview, goHome, openFind, addNote, editSynopsis])
 
   // the main process asks for a flush before it closes the window
   useEffect(() => {
@@ -749,13 +1053,14 @@ export function App(): JSX.Element {
         setStoryboard,
         setLightMaps,
         setCharacters,
+        setNotes,
         save: () => saveNow(false),
         touched: () => {
-          setMessage('O Claude editou o roteiro. Ctrl+Z desfaz.')
-          window.setTimeout(() => setMessage((m) => (m?.startsWith('O Claude') ? null : m)), 4000)
+          setMessage('A IA editou o roteiro. Ctrl+Z desfaz.')
+          window.setTimeout(() => setMessage((m) => (m?.startsWith('A IA editou') ? null : m)), 4000)
         }
       }),
-    [setBoard, setStoryboard, setLightMaps, setCharacters, saveNow, scheduleAutosave]
+    [setBoard, setStoryboard, setLightMaps, setCharacters, setNotes, saveNow, scheduleAutosave]
   )
 
   useEffect(() => {
@@ -793,6 +1098,98 @@ export function App(): JSX.Element {
   )
   const activeScene = scenes.findIndex((s) => caret.block >= s.index && caret.block < s.end)
   const currentPage = (pagination.blockPage[caret.block] ?? 0) + 1
+  // ------------------------------------------------------------ scene links
+  // Frames and light maps keep the id of their scene (sid); their label follows that scene's number.
+  // Ones without an id (old files, the AI, a scene picked by hand) are linked by their label.
+  useEffect(() => {
+    const h = handle.current
+    if (view !== 'editor' || !h) return
+    const idNumber = new Map<string, string>()
+    const numberIndex = new Map<string, number>()
+    blocks.forEach((b, i) => {
+      if (b.kind !== 'scene_heading') return
+      const num = numbers[i] ?? ''
+      if (b.nid) idNumber.set(b.nid, num)
+      if (num && !numberIndex.has(num)) numberIndex.set(num, i)
+    })
+    const frames = storyboard.frames
+    const maps = lightMaps
+    const toLink = [...frames, ...maps].filter((x) => !x.sid && numberIndex.has(x.scene))
+    const anchors = new Map<string, string>()
+    if (toLink.length) {
+      const nums = [...new Set(toLink.map((x) => x.scene))]
+      h.anchorBlocks(nums.map((n) => numberIndex.get(n) as number)).forEach((a, k) => {
+        if (a) anchors.set(nums[k], a)
+      })
+    }
+    const fix = <T extends { scene: string; sid?: string }>(x: T): T => {
+      if (x.sid && idNumber.has(x.sid)) {
+        const num = idNumber.get(x.sid) as string
+        return num === x.scene ? x : { ...x, scene: num }
+      }
+      if (!x.sid && anchors.has(x.scene)) return { ...x, sid: anchors.get(x.scene) }
+      return x
+    }
+    const nextFrames = frames.map(fix)
+    if (nextFrames.some((x, i) => x !== frames[i])) putStoryboard({ ...storyboard, frames: nextFrames })
+    const nextMaps = maps.map(fix)
+    if (nextMaps.some((x, i) => x !== maps[i])) putLightMaps(nextMaps)
+  }, [view, blocks, numbers, storyboard, lightMaps, ready, putStoryboard, putLightMaps])
+
+  const linksBySid = useMemo(() => {
+    const m = new Map<string, SceneLinks>()
+    const get = (sid: string): SceneLinks => {
+      let l = m.get(sid)
+      if (!l) m.set(sid, (l = { frames: 0, maps: [] }))
+      return l
+    }
+    for (const fr of storyboard.frames) if (fr.sid) get(fr.sid).frames += 1
+    for (const lm of lightMaps) if (lm.sid) get(lm.sid).maps.push({ id: lm.id, name: lm.name })
+    return m
+  }, [storyboard.frames, lightMaps])
+  const linksOf = useCallback((sid: string | null): SceneLinks => (sid ? linksBySid.get(sid) : undefined) ?? NO_LINKS, [linksBySid])
+  const openStoryboardAt = useCallback((scene: string) => {
+    setJump({ scene })
+    setPanel('storyboard')
+  }, [])
+  const openMap = useCallback((map: string) => {
+    setJump({ map })
+    setPanel('lightmap')
+  }, [])
+  useEffect(() => {
+    if (panel !== 'storyboard' && panel !== 'lightmap') setJump((j) => (j.scene || j.map ? {} : j))
+  }, [panel])
+
+  const shootingScenes = useMemo(
+    () => (panel === 'shooting' ? sceneInfo({ blocks, paper, scenesLocked }, pagination) : []),
+    [panel, blocks, paper, scenesLocked, pagination]
+  )
+  const sceneIdsOf = useCallback((list: { id: string | null; index: number }[]) => {
+    const missing = list.filter((sc) => !sc.id)
+    const given = missing.length ? handle.current?.anchorBlocks(missing.map((sc) => sc.index)) ?? [] : []
+    let k = 0
+    return list.map((sc) => sc.id ?? given[k++] ?? null)
+  }, [])
+  const sceneIdOf = useCallback((sc: { id: string | null; index: number }) => sc.id ?? handle.current?.anchorBlocks([sc.index])[0] ?? null, [])
+  const exportReportPdf = useCallback(
+    (report: Report, landscape: boolean) =>
+      void window.api
+        .exportReportPdf({
+          // a shooting plan prints day by day; other reports as their table
+          ...printable(report),
+          scriptTitle: scriptRef.current.titlePage.title || baseName(pathRef.current) || 'Sem título',
+          paper: scriptRef.current.paper === 'a4' ? 'a4' : 'letter',
+          landscape
+        })
+        .then((p) => p && flash(`Exportado: ${p.split(/[\\/]/).pop()}`))
+        .catch(() => flash('Não foi possível exportar o relatório.')),
+    [flash]
+  )
+  const exportCsv = useCallback(
+    (name: string, csv: string) => void window.api.exportText(name, 'csv', csv).then((p) => p && flash(`Exportado: ${p.split(/[\\/]/).pop()}`)),
+    [flash]
+  )
+
   const words = useMemo(
     () => blocks.reduce((n, b) => n + (b.text.trim() ? b.text.trim().split(/\s+/).length : 0), 0),
     [blocks]
@@ -916,7 +1313,7 @@ export function App(): JSX.Element {
               </section>
             )}
             <p className="home-links">
-              <button className="btn ghost" onClick={() => setDialog('connect')}>Conectar ao Claude…</button>
+              <button className="btn ghost" onClick={() => setDialog('connect')}>Conectar a uma IA…</button>
               <button className="btn ghost" onClick={() => setDialog('manual')}>Manual</button>
             </p>
           </div>
@@ -934,113 +1331,146 @@ export function App(): JSX.Element {
 
   return (
     <div className="app">
-      <div className="toolbar" role="toolbar" aria-label="Ferramentas">
-        <button className="btn ghost" onClick={() => void goHome()}>Início</button>
-        <label className="sr-only" htmlFor="kind">Elemento</label>
-        <select id="kind" value={caret.kind} onChange={(e) => handle.current?.setKind(e.target.value as Kind)}>
-          {ELEMENT_OPTIONS.map((o) => (
-            <option key={o.kind} value={o.kind}>
-              {o.label} ({o.shortcut})
-            </option>
-          ))}
-        </select>
-        <div className="seg" role="group" aria-label="Visão">
-          <button className="btn ghost" aria-pressed={panel === 'script'} onClick={() => setPanel('script')}>Roteiro</button>
-          <button className="btn ghost" aria-pressed={panel === 'board'} onClick={() => setPanel('board')}>Beat Board</button>
-          <button className="btn ghost" aria-pressed={panel === 'storyboard'} onClick={() => setPanel('storyboard')}>Storyboard</button>
-          <button className="btn ghost" aria-pressed={panel === 'lightmap'} onClick={() => setPanel('lightmap')}>Mapa de Luz</button>
-          <button className="btn ghost" aria-pressed={panel === 'reports'} onClick={() => setPanel('reports')}>Relatórios</button>
-        </div>
-        {!narrow && (
-          <>
-            <button className="btn ghost" onClick={() => setNavigator((v) => !v)} aria-pressed={navigator}>Navegador</button>
-            <button className="btn ghost" onClick={openFind}>Localizar</button>
-            <button className="btn ghost" aria-pressed={caret.dual} title="Ctrl+D" onClick={toggleDualDialogue}>
-              Diálogo duplo
-            </button>
-          </>
-        )}
-        <Popover label="Produção">
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={revision.mode}
-              onChange={(e) => setRevision({ ...revision, mode: e.target.checked })}
-            />
-            Modo de revisão
-          </label>
-          <label className="stack" htmlFor="rev-color">Cor da revisão</label>
-          <select id="rev-color" value={revision.color} onChange={(e) => setRevision({ ...revision, color: e.target.value })}>
-            {REVISIONS.map((r) => (
-              <option key={r.id} value={r.id}>{r.label}</option>
+      <div className="toolbar" role="toolbar" aria-label="Ferramentas" ref={fold.ref}>
+        <span className="toolbar-reserve" aria-hidden="true" style={{ width: toolbarEnd.w + 8, height: toolbarEnd.h + 2 }} />
+        <div className="toolbar-main">
+          <button className="btn ghost" onClick={() => void goHome()}>Início</button>
+          <label className="sr-only" htmlFor="kind">Elemento</label>
+          <select id="kind" value={caret.kind} onChange={(e) => handle.current?.setKind(e.target.value as Kind)}>
+            {ELEMENT_OPTIONS.map((o) => (
+              <option key={o.kind} value={o.kind}>
+                {o.label} ({o.shortcut})
+              </option>
             ))}
           </select>
-          <button className="btn ghost" data-close onClick={clearRevisions}>Limpar marcas de revisão</button>
-          <hr />
-          <label className="check">
-            <input type="checkbox" checked={numberScenes} onChange={(e) => setNumberScenes(e.target.checked)} />
-            Mostrar números de cena
-          </label>
-          <label className="check">
-            <input type="checkbox" checked={scenesLocked} onChange={toggleLock} />
-            Travar numeração (novas cenas viram 3A, 3B…)
-          </label>
-        </Popover>
-        <Popover label="Mais">
-          {narrow && (
-            <>
+          <div className="seg" role="group" aria-label="Visão">
+            <button className="btn ghost" aria-pressed={panel === 'script'} onClick={() => setPanel('script')}>Roteiro</button>
+            <button className="btn ghost" aria-pressed={panel === 'board'} onClick={() => setPanel('board')}>Beat Board</button>
+            <button className="btn ghost" aria-pressed={panel === 'storyboard'} onClick={() => setPanel('storyboard')}>Storyboard</button>
+            <button className="btn ghost" aria-pressed={panel === 'lightmap'} onClick={() => setPanel('lightmap')}>Mapa de Luz</button>
+            <button className="btn ghost" aria-pressed={panel === 'reports'} onClick={() => setPanel('reports')}>Relatórios</button>
+            <button className="btn ghost" aria-pressed={panel === 'shooting'} onClick={() => setPanel('shooting')}>Filmagem</button>
+          </div>
+          {!folded('nav') && (
+            <button className="btn ghost" data-fold="nav" onClick={() => setNavigator((v) => !v)} aria-pressed={navigator}>Navegador</button>
+          )}
+          {!folded('notes') && (
+            <button className="btn ghost" data-fold="notes" onClick={() => setNotesOpen((v) => !v)} aria-pressed={notesOpen}>Notas</button>
+          )}
+          {!folded('find') && <button className="btn ghost" data-fold="find" onClick={openFind}>Localizar</button>}
+          {!folded('dual') && (
+            <button className="btn ghost" data-fold="dual" aria-pressed={caret.dual} title="Ctrl+D" onClick={toggleDualDialogue}>
+              Diálogo duplo
+            </button>
+          )}
+          <Popover label="Produção">
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={revision.mode}
+                onChange={(e) => setRevision({ ...revision, mode: e.target.checked })}
+              />
+              Modo de revisão
+            </label>
+            <label className="stack" htmlFor="rev-color">Cor da revisão</label>
+            <select id="rev-color" value={revision.color} onChange={(e) => setRevision({ ...revision, color: e.target.value })}>
+              {REVISIONS.map((r) => (
+                <option key={r.id} value={r.id}>{r.label}</option>
+              ))}
+            </select>
+            <button className="btn ghost" data-close onClick={clearRevisions}>Limpar marcas de revisão</button>
+            <hr />
+            <label className="check">
+              <input type="checkbox" checked={numberScenes} onChange={(e) => setNumberScenes(e.target.checked)} />
+              Mostrar números de cena
+            </label>
+            <label className="check">
+              <input type="checkbox" checked={scenesLocked} onChange={toggleLock} />
+              Travar numeração (novas cenas viram 3A, 3B…)
+            </label>
+          </Popover>
+          <Popover label="Mais">
+            {/* the toolbar buttons that did not fit on the bar (see useToolbarFold) */}
+            {folded('nav') && (
               <button className="btn ghost" data-close onClick={() => setNavigator((v) => !v)} aria-pressed={navigator}>
                 {navigator ? 'Ocultar navegador de cenas' : 'Mostrar navegador de cenas'}
               </button>
-              <button className="btn ghost" data-close onClick={openFind}>Localizar e substituir…</button>
+            )}
+            {folded('notes') && (
+              <button className="btn ghost" data-close onClick={() => setNotesOpen((v) => !v)} aria-pressed={notesOpen}>
+                {notesOpen ? 'Ocultar notas' : 'Mostrar notas'}
+              </button>
+            )}
+            {folded('find') && <button className="btn ghost" data-close onClick={openFind}>Localizar e substituir…</button>}
+            {folded('dual') && (
               <button className="btn ghost" data-close aria-pressed={caret.dual} onClick={toggleDualDialogue}>
                 Diálogo duplo (Ctrl+D)
               </button>
-              <button className="btn ghost" data-close onClick={() => void doPreview()}>Visualizar impressão</button>
-              <label className="stack" htmlFor="theme-select-narrow">Tema</label>
-              <select id="theme-select-narrow" value={theme} onChange={(e) => setTheme(e.target.value as Theme)}>
-                {(Object.keys(THEME_LABEL) as Theme[]).map((t) => (
-                  <option key={t} value={t}>{THEME_LABEL[t]}</option>
-                ))}
-              </select>
-              <hr />
-            </>
+            )}
+            {folded('preview') && <button className="btn ghost" data-close onClick={() => void doPreview()}>Visualizar impressão</button>}
+            {folded('theme') && (
+              <>
+                <label className="stack" htmlFor="theme-select-narrow">Tema</label>
+                <select id="theme-select-narrow" value={theme} onChange={(e) => setTheme(e.target.value as Theme)}>
+                  {(Object.keys(THEME_LABEL) as Theme[]).map((t) => (
+                    <option key={t} value={t}>{THEME_LABEL[t]}</option>
+                  ))}
+                </select>
+              </>
+            )}
+            {folded(FOLD_ORDER[0]) && <hr />}
+            <label className="stack" htmlFor="paper-select">Papel do PDF</label>
+            <select
+              id="paper-select"
+              value={paper}
+              onChange={(e) => {
+                setPaperState(e.target.value as Paper)
+                scheduleAutosave()
+              }}
+            >
+              <option value="a4">A4 (21 × 29,7 cm)</option>
+              <option value="letter">Carta / Letter (21,6 × 27,9 cm)</option>
+            </select>
+            <hr />
+            <button className="btn ghost" data-close onClick={() => setReadOpen(true)}>Leitura em voz alta…</button>
+            <button className="btn ghost" data-close onClick={() => setDialog('title')}>Página de título…</button>
+            <button className="btn ghost" data-close onClick={() => setDialog('watermark')}>Marca d’água…</button>
+            <button className="btn ghost" data-close onClick={() => setDialog('versions')}>Versões anteriores…</button>
+            <button className="btn ghost" data-close onClick={() => setDialog('copyfolder')}>Cópia em outra pasta…</button>
+            <button className="btn ghost" data-close onClick={() => setDialog('smarttype')}>Gerenciar SmartType…</button>
+            <button className="btn ghost" data-close onClick={() => setDialog('export')}>Exportar…</button>
+            <button className="btn ghost" data-close onClick={() => void doImport()}>Importar…</button>
+            <button className="btn ghost" data-close onClick={() => setDialog('connect')}>Conectar a uma IA…</button>
+            <button className="btn ghost" data-close onClick={() => setDialog('manual')}>Manual</button>
+            <button className="btn ghost" data-close onClick={() => setDialog('diagnostics')}>Copiar diagnóstico…</button>
+          </Popover>
+        </div>
+        <div className="toolbar-end" ref={toolbarEndRef}>
+          {!folded('theme') && (
+            <span data-fold="theme">
+              <ThemeToggle value={theme} onChange={setTheme} />
+            </span>
           )}
-          <label className="stack" htmlFor="paper-select">Papel do PDF</label>
-          <select
-            id="paper-select"
-            value={paper}
-            onChange={(e) => {
-              setPaperState(e.target.value as Paper)
-              scheduleAutosave()
-            }}
+          {!folded('preview') && (
+            <button className="btn ghost" data-fold="preview" title="Visualizar impressão (Ctrl+Shift+P)" onClick={() => void doPreview()}>
+              Visualizar
+            </button>
+          )}
+          {!folded('pdf') && <button className="btn secondary" data-fold="pdf" onClick={() => void doExport('pdf')}>Exportar PDF</button>}
+          <button
+            className="btn primary icon-only"
+            aria-label={path ? 'Salvar' : 'Salvar como…'}
+            title={path ? 'Salvar (Ctrl+S)' : 'Salvar como… (Ctrl+S)'}
+            onClick={() => void saveNow(!path)}
           >
-            <option value="a4">A4 (21 × 29,7 cm)</option>
-            <option value="letter">Carta / Letter (21,6 × 27,9 cm)</option>
-          </select>
-          <hr />
-          <button className="btn ghost" data-close onClick={() => setDialog('title')}>Página de título…</button>
-          <button className="btn ghost" data-close onClick={() => setDialog('versions')}>Versões anteriores…</button>
-          <button className="btn ghost" data-close onClick={() => setDialog('smarttype')}>Gerenciar SmartType…</button>
-          <button className="btn ghost" data-close onClick={() => void doExport('storyboard-pdf')}>Exportar só o storyboard (PDF)…</button>
-          <button className="btn ghost" data-close onClick={() => void doExport('lightmap-pdf')}>Exportar só os mapas de luz (PDF)…</button>
-          <button className="btn ghost" data-close onClick={() => void doExport('characters-pdf')}>Exportar só as fichas de personagem (PDF)…</button>
-          <button className="btn ghost" data-close onClick={() => void doExport('fdx')}>Exportar FDX…</button>
-          <button className="btn ghost" data-close onClick={() => void doExport('fountain')}>Exportar Fountain…</button>
-          <button className="btn ghost" data-close onClick={() => void doImport()}>Importar…</button>
-          <button className="btn ghost" data-close onClick={() => setDialog('connect')}>Conectar ao Claude…</button>
-          <button className="btn ghost" data-close onClick={() => setDialog('manual')}>Manual</button>
-          <button className="btn ghost" data-close onClick={() => setDialog('diagnostics')}>Copiar diagnóstico…</button>
-        </Popover>
-        <span className="spacer" />
-        {!narrow && <ThemeToggle value={theme} onChange={setTheme} />}
-        {!narrow && (
-          <button className="btn ghost" title="Visualizar impressão (Ctrl+Shift+P)" onClick={() => void doPreview()}>
-            Visualizar
+            {/* a floppy disk */}
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 3h11.2a2 2 0 0 1 1.4.6l2.8 2.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
+              <path d="M7 3v5h8V3" />
+              <path d="M7 21v-7h10v7" />
+            </svg>
           </button>
-        )}
-        <button className="btn secondary" onClick={() => void doExport('pdf')}>Exportar PDF</button>
-        <button className="btn primary" onClick={() => void saveNow(!path)}>{path ? 'Salvar' : 'Salvar como…'}</button>
+        </div>
       </div>
 
       {panel === 'script' && findOpen && (
@@ -1054,7 +1484,21 @@ export function App(): JSX.Element {
         />
       )}
 
-      <div className={navigator && panel === 'script' ? 'body with-nav' : 'body'}>
+      {panel === 'script' && readOpen && (
+        <ReadBar
+          getBlocks={() => handle.current?.getBlocks() ?? []}
+          caretBlock={() => handle.current?.selection().block ?? 0}
+          tableRead={tableRead}
+          onTableRead={setTableRead}
+          onLine={onReadLine}
+          onClose={() => {
+            setReadOpen(false)
+            handle.current?.focus()
+          }}
+        />
+      )}
+
+      <div className={'body' + (navigator && panel === 'script' ? ' with-nav' : '') + (notesOpen && panel === 'script' ? ' with-notes' : '')}>
         {navigator && panel === 'script' && (
           <aside className="nav" aria-label="Navegador de cenas">
             <h2>Cenas ({scenes.length})</h2>
@@ -1077,13 +1521,22 @@ export function App(): JSX.Element {
                     onMove={moveSceneStable}
                     onDragStart={setDragScene}
                     onDropOn={dropOnScene}
+                    frames={linksOf(blocks[s.index]?.nid ?? null).frames}
+                    maps={linksOf(blocks[s.index]?.nid ?? null).maps.length}
+                    firstMap={linksOf(blocks[s.index]?.nid ?? null).maps[0]?.id ?? null}
+                    onOpenStoryboard={openStoryboardAt}
+                    onOpenMap={openMap}
+                    syn={blocks[s.index]?.syn ?? ''}
+                    editingSyn={synEdit === s.index}
+                    onEditSyn={editSynopsis}
+                    onSaveSyn={saveSynopsis}
                   />
                 ))}
               </ol>
             )}
           </aside>
         )}
-        <main className="canvas" aria-label="Área de trabalho">
+        <main className="canvas" aria-label="Área de trabalho" ref={canvasRef}>
           <div hidden={panel !== 'script'}>
             <Editor
               key={docKey}
@@ -1111,6 +1564,7 @@ export function App(): JSX.Element {
               onChange={setStoryboard}
               onExport={() => void doExport('storyboard-pdf')}
               flash={flash}
+              focusScene={jump.scene}
             />
           )}
           {panel === 'lightmap' && (
@@ -1119,6 +1573,23 @@ export function App(): JSX.Element {
               scenes={scenes.map((sc) => ({ number: sc.number, text: sc.text }))}
               onChange={setLightMaps}
               onExport={() => void doExport('lightmap-pdf')}
+              focusMap={jump.map}
+            />
+          )}
+          {panel === 'shooting' && (
+            <ProductionView
+              scenes={shootingScenes}
+              production={production}
+              onChange={setProduction}
+              sceneId={sceneIdOf}
+              sceneIds={sceneIdsOf}
+              current={Math.max(0, activeScene)}
+              links={linksOf}
+              onGoToScene={goToSceneBlock}
+              onOpenStoryboard={openStoryboardAt}
+              onOpenMap={openMap}
+              onExportPdf={exportReportPdf}
+              onExportCsv={exportCsv}
             />
           )}
           {panel === 'reports' && (
@@ -1129,7 +1600,7 @@ export function App(): JSX.Element {
               onExportPdf={(report, landscape) =>
                 void window.api
                   .exportReportPdf({
-                    ...report,
+                    ...printable(report),
                     scriptTitle: titlePage.title || baseName(pathRef.current) || 'Sem título',
                     paper: paper === 'a4' ? 'a4' : 'letter',
                     landscape
@@ -1144,6 +1615,20 @@ export function App(): JSX.Element {
             />
           )}
         </main>
+        {notesOpen && panel === 'script' && (
+          <NotesPanel
+            blocks={blocks}
+            groups={noteGroups.groups}
+            loose={noteGroups.loose}
+            sceneLabel={(n) => (numberScenes || scenesLocked ? scenes[n]?.number ?? String(n + 1) : String(n + 1))}
+            fresh={freshNote}
+            onAdd={addNote}
+            onUpdate={updateNote}
+            onDelete={deleteNote}
+            onGo={focusSceneBlock}
+            onPin={pinNote}
+          />
+        )}
       </div>
 
       {/* Not a live region as a whole: a screen reader would read the whole bar at every keystroke.
@@ -1155,7 +1640,12 @@ export function App(): JSX.Element {
         {revText && <span className="pill">{revText}</span>}
         {scenesLocked && <span className="pill">Cenas travadas</span>}
         <span className="spacer" />
-        {claudeActive && <span className="pill claude" role="status">Claude conectado</span>}
+        {claudeActive && <span className="pill claude" role="status">IA conectada</span>}
+        {copyFailed && (
+          <button className="pill warn" title={copyFailed} onClick={() => setDialog('copyfolder')}>
+            Cópia em outra pasta falhou
+          </button>
+        )}
         <span role="status" aria-live="polite">{SAVE_LABEL[saved]}</span>
       </div>
 
@@ -1167,6 +1657,53 @@ export function App(): JSX.Element {
           onClose={() => setDialog(null)}
           onSave={(t) => {
             setTitlePage(t)
+            setDialog(null)
+            scheduleAutosave()
+          }}
+        />
+      )}
+      {dialog === 'export' && (
+        <ExportDialog
+          frames={storyboard.frames.length}
+          maps={lightMaps.length}
+          onExport={(f) => {
+            setDialog(null)
+            void doExport(f)
+          }}
+          onPreview={() => {
+            setDialog(null)
+            void doPreview()
+          }}
+          onReports={() => {
+            setDialog(null)
+            setPanel('reports')
+          }}
+          onShooting={() => {
+            setDialog(null)
+            setPanel('shooting')
+          }}
+          onClose={() => setDialog(null)}
+        />
+      )}
+      {dialog === 'copyfolder' && (
+        <CopyFolderDialog
+          onClose={() => setDialog(null)}
+          onChanged={(info) => {
+            // a new folder gets a copy right away
+            if (info.dir && pathRef.current) void saveNow(false)
+            if (!info.dir) {
+              copyFailedRef.current = null
+              setCopyFailed(null)
+            }
+          }}
+        />
+      )}
+      {dialog === 'watermark' && (
+        <WatermarkDialog
+          value={watermark}
+          onClose={() => setDialog(null)}
+          onSave={(w) => {
+            setWatermark(w)
             setDialog(null)
             scheduleAutosave()
           }}

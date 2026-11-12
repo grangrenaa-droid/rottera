@@ -18,6 +18,7 @@ import {
   type ViewState
 } from './extension'
 import { blockToJson, blocksToDoc, docToBlocks } from './blocks'
+import { newId } from '../shared/structures'
 
 export interface CaretInfo {
   kind: Kind
@@ -39,6 +40,14 @@ export interface EditorHandle {
   replaceAllHits(replacement: string): number
   toggleDual(): boolean
   selection(): { block: number; text: string; kind: Kind }
+  /** The note anchor of the caret's line, given to the line first if it has none. */
+  anchorAtCaret(): string | null
+  /** The anchors of these lines (by block index), given in one step to the ones that have none. */
+  anchorBlocks(indices: number[]): (string | null)[]
+  /** Sets the synopsis of the scene heading at this block index ('' removes it). Undoable. */
+  setSynopsis(index: number, text: string): boolean
+  /** Scrolls a line into the middle of the screen without moving the caret. */
+  revealBlock(index: number): void
 }
 
 interface Props {
@@ -129,7 +138,8 @@ export function Editor({ initial, extras, onChange, onCaret, onReady }: Props): 
         })
       }
       const atEnd = selection.empty && $from.parentOffset === $from.parent.content.size
-      if (!atEnd || $from.parent.type.name !== 'block') {
+      const kind = $from.parent.attrs.kind as Kind
+      if (!atEnd || $from.parent.type.name !== 'block' || (kind !== 'character' && kind !== 'scene_heading')) {
         setPopup(null)
         return
       }
@@ -264,6 +274,49 @@ export function Editor({ initial, extras, onChange, onCaret, onReady }: Props): 
         const { $from, from, to } = editor.state.selection
         const text = from === to ? $from.parent.textContent : editor.state.doc.textBetween(from, to, '\n')
         return { block: $from.index(0), text, kind: $from.parent.attrs.kind as Kind }
+      },
+      anchorAtCaret: () => {
+        const { $from } = editor.state.selection
+        if ($from.depth < 1 || $from.parent.type.name !== 'block') return null
+        const have = $from.parent.attrs.nid
+        if (typeof have === 'string' && have) return have
+        const nid = newId('n')
+        const tr = editor.state.tr.setNodeMarkup($from.before(1), undefined, { ...$from.parent.attrs, nid })
+        // not an edit of the script: Ctrl+Z must not take the note's line away, and revision mode must not mark it
+        tr.setMeta('addToHistory', false).setMeta('noRev', true)
+        editor.view.dispatch(tr)
+        return nid
+      },
+      revealBlock: (index) => {
+        const s = starts()
+        if (index < 0 || index >= s.length) return
+        const dom = editor.view.nodeDOM(s[index])
+        if (dom instanceof HTMLElement) dom.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      },
+      setSynopsis: (index, text) => {
+        const s = starts()
+        if (index < 0 || index >= s.length) return false
+        const node = editor.state.doc.nodeAt(s[index])
+        if (!node || node.attrs.kind !== 'scene_heading') return false
+        const syn = text.trim() || null
+        if (node.attrs.syn === syn) return true
+        editor.view.dispatch(editor.state.tr.setNodeMarkup(s[index], undefined, { ...node.attrs, syn }).setMeta('noRev', true))
+        return true
+      },
+      anchorBlocks: (indices) => {
+        const s = starts()
+        const tr = editor.state.tr
+        const out = indices.map((i) => {
+          if (i < 0 || i >= s.length) return null
+          const node = tr.doc.nodeAt(s[i])
+          if (!node) return null
+          if (typeof node.attrs.nid === 'string' && node.attrs.nid) return node.attrs.nid as string
+          const nid = newId('n')
+          tr.setNodeMarkup(s[i], undefined, { ...node.attrs, nid })
+          return nid
+        })
+        if (tr.docChanged) editor.view.dispatch(tr.setMeta('addToHistory', false).setMeta('noRev', true))
+        return out
       }
     })
   }, [editor, onReady])

@@ -32,7 +32,8 @@ export function renameLocation(blocks: Block[], from: string, to: string): { blo
     const h = parseHeading(b.text)
     if (!h.intro || norm(h.location) !== f) return b
     count += 1
-    const intro = /^(\S+?)(\.?)\s/.exec(b.text.trim() + ' ')
+    // the intro as written ("INT", "I/E"), with its dot; a dash after it ("INT.- ") is left out
+    const intro = /^(INT\.\/EXT|INT\/EXT|INT|EXT|EST|I\/E)(\.?)/i.exec(b.text.trim())
     const prefix = intro ? `${intro[1]}${intro[2] || '.'}` : `${h.intro}.`
     return { ...b, text: `${prefix} ${t}${h.hasSep ? ` - ${h.time}` : ''}` }
   })

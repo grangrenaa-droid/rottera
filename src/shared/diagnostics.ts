@@ -59,7 +59,7 @@ export function formatDiagnostics(d: DiagnosticsInput, now: Date = new Date()): 
   lines.push(`Electron ${d.electron}, Chrome ${d.chrome}, Node ${d.node}`)
   lines.push(`Sistema: ${d.platform} ${d.osRelease} (${d.arch}), idioma ${d.locale}`)
   lines.push(`Memória do computador: ${d.memoryGb} GB; programa aberto há ${d.uptimeMin} min`)
-  lines.push(`Conexão com o Claude: ${d.bridgeOn ? 'ligada' : 'desligada'}`)
+  lines.push(`Conexão com a IA:${d.bridgeOn ? 'ligada' : 'desligada'}`)
   lines.push(`Última abertura: ${d.startedAfterCrash ? 'o programa não tinha sido fechado normalmente' : 'normal'}`)
   if (d.view) {
     lines.push(`Tela: ${d.view.panel}, tema ${d.view.theme}, janela ${d.view.width}×${d.view.height}, zoom ${d.view.zoom}`)

@@ -86,9 +86,10 @@ describe('reports', () => {
     blocks: [...script(), { kind: 'action', text: 'Alterada.', rev: 'azul' }]
   }
   const reports = buildReports(s)
-  it('builds eight reports', () => {
+  it('builds fourteen reports', () => {
     expect(reports.map((r) => r.id)).toEqual([
-      'cenas', 'personagens', 'locais', 'horarios', 'elementos', 'revisoes', 'paginas', 'estatisticas'
+      'cenas', 'personagens', 'locais', 'horarios', 'elementos', 'revisoes', 'paginas', 'estatisticas',
+      'escaleta', 'planos', 'equipamento', 'decupagem', 'elementos-producao', 'plano'
     ])
   })
   it('counts scenes, characters and locations', () => {
