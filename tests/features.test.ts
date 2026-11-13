@@ -86,10 +86,10 @@ describe('reports', () => {
     blocks: [...script(), { kind: 'action', text: 'Alterada.', rev: 'azul' }]
   }
   const reports = buildReports(s)
-  it('builds fourteen reports', () => {
+  it('builds sixteen reports', () => {
     expect(reports.map((r) => r.id)).toEqual([
       'cenas', 'personagens', 'locais', 'horarios', 'elementos', 'revisoes', 'paginas', 'estatisticas',
-      'escaleta', 'planos', 'equipamento', 'decupagem', 'elementos-producao', 'plano'
+      'escaleta', 'planos', 'equipamento', 'decupagem', 'elementos-producao', 'plano', 'musicas', 'equipamento-som'
     ])
   })
   it('counts scenes, characters and locations', () => {
@@ -205,5 +205,12 @@ describe('extras and file format', () => {
       numberScenes: true
     }
     expect(parseScriptFile(serialize(s))).toEqual(s)
+  })
+})
+
+describe('sound reports', () => {
+  it('the music list and the sound equipment are at the end of the reports', () => {
+    const ids = buildReports({ titlePage: { title: 'T', author: '', contact: '' }, blocks: script() }).map((r) => r.id)
+    expect(ids.slice(-2)).toEqual(['musicas', 'equipamento-som'])
   })
 })

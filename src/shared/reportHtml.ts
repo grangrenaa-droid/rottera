@@ -8,6 +8,13 @@ export interface ReportSection {
   rows: (string | number)[][]
 }
 
+/** One of several tables printed one after the other on the same report (ambiences, then music). */
+export interface ReportTable {
+  title: string
+  columns: string[]
+  rows: (string | number)[][]
+}
+
 /** One shot of a scene on a day sheet. */
 export interface CallSheetShot {
   time: string
@@ -54,6 +61,8 @@ export interface ReportPrint {
   sections?: ReportSection[]
   /** When given, the page is a day sheet instead of a table. */
   callsheet?: CallSheet
+  /** When given, these tables are printed one after the other, each with its heading (and `rows` is not used). */
+  tables?: ReportTable[]
   scriptTitle: string
 }
 
@@ -71,11 +80,19 @@ function isNumeric(v: string | number): boolean {
 
 /** Keeps what the printer is given inside sane limits and as text. */
 export function cleanReport(r: ReportPrint): ReportPrint {
-  const cols = r.columns.slice(0, 30).map((c) => String(c).slice(0, 200))
-  const clean = (list: unknown): (string | number)[][] =>
+  const columnsOf = (v: unknown): string[] => (Array.isArray(v) ? v : []).slice(0, 30).map((c) => String(c).slice(0, 200))
+  const cols = columnsOf(r.columns)
+  const rowsOf = (list: unknown, cols: string[]): (string | number)[][] =>
     (Array.isArray(list) ? list : [])
       .slice(0, MAX_ROWS)
       .map((row) => cols.map((_, i) => (Array.isArray(row) && typeof row[i] === 'number' ? row[i] : String((Array.isArray(row) ? row[i] : '') ?? '').slice(0, MAX_CELL))))
+  const clean = (list: unknown): (string | number)[][] => rowsOf(list, cols)
+  const tables = Array.isArray(r.tables)
+    ? r.tables.slice(0, 20).map((t) => {
+        const c = columnsOf(t?.columns)
+        return { title: String(t?.title ?? '').slice(0, 200), columns: c, rows: rowsOf(t?.rows, c) }
+      })
+    : undefined
   const text = (v: unknown, max: number): string | undefined => (typeof v === 'string' && v.trim() ? v.slice(0, max) : undefined)
   const sections = Array.isArray(r.sections)
     ? r.sections.slice(0, 1000).map((s) => ({
@@ -92,6 +109,7 @@ export function cleanReport(r: ReportPrint): ReportPrint {
     rows: clean(r.rows),
     ...(sections ? { sections } : {}),
     ...(callsheet ? { callsheet } : {}),
+    ...(tables ? { tables } : {}),
     scriptTitle: String(r.scriptTitle).slice(0, 200)
   }
 }
@@ -157,7 +175,9 @@ function callSheetHtml(c: CallSheet, scriptTitle: string): string {
 const blank = (v: string | number): boolean => typeof v !== 'number' && (String(v).trim() === '' || String(v).trim() === '—')
 
 /** Leaves out the columns no row has anything in (keeping at least the first). */
-function withoutEmptyColumns(r: ReportPrint): ReportPrint {
+type TableLike = { columns: string[]; rows: (string | number)[][]; sections?: ReportSection[] }
+
+function withoutEmptyColumns<T extends TableLike>(r: T): T {
   const all = r.sections ? r.sections.flatMap((s) => s.rows) : r.rows
   if (all.length === 0) return r
   let keep = r.columns.map((_, i) => all.some((row) => !blank(row[i] ?? '')))
@@ -172,8 +192,8 @@ function withoutEmptyColumns(r: ReportPrint): ReportPrint {
   }
 }
 
-export function buildReportHtml(input: ReportPrint): string {
-  const r = withoutEmptyColumns(cleanReport(input))
+/** A table, with its rows in groups when it has them. */
+function tableHtml(r: TableLike): string {
   const all = r.sections ? r.sections.flatMap((s) => s.rows) : r.rows
   // a column is numeric when every non-empty cell in it is
   const numeric = r.columns.map((_, i) => {
@@ -198,12 +218,24 @@ export function buildReportHtml(input: ReportPrint): string {
         )
         .join('\n')
     : `<tbody>\n${r.rows.map(line).join('\n')}\n</tbody>`
+  return `<table><thead><tr>${head}</tr></thead>\n${body}\n</table>`
+}
+
+export function buildReportHtml(input: ReportPrint): string {
+  const r = withoutEmptyColumns(cleanReport(input))
+  const all = r.sections ? r.sections.flatMap((s) => s.rows) : r.rows
+  const content = r.tables
+    ? r.tables.map((t) => `<h2>${esc(t.title)}</h2>\n${t.rows.length ? tableHtml(withoutEmptyColumns(t)) : '<p class="empty">Nada nesta lista.</p>'}`).join('\n')
+    : all.length === 0 && !r.sections?.length
+      ? '<p class="empty">Sem dados neste relatório.</p>'
+      : tableHtml(r)
   return `<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(r.scriptTitle ? `${r.scriptTitle} — ${r.title}` : r.title)}</title>
 <style>
 * { box-sizing: border-box }
 body { margin: 0; font: 9pt/1.35 "Segoe UI", Arial, sans-serif; color: #111 }
 h1 { font-size: 14pt; margin: 0 0 2pt }
+h2 { font-size: 11pt; margin: 14pt 0 4pt; break-after: avoid }
 .sub { color: #444; margin: 0 0 10pt }
 /* as wide as its content needs (a table of two short columns does not stretch across the page), never wider than it */
 table { width: auto; min-width: 50%; max-width: 100%; border-collapse: collapse; table-layout: auto }
@@ -245,11 +277,7 @@ ${
     ? callSheetHtml(r.callsheet, r.scriptTitle)
     : `<h1>${esc(r.title)}</h1>
 <p class="sub">${esc(r.scriptTitle || 'Sem título')}</p>
-${
-  all.length === 0 && !r.sections?.length
-    ? '<p class="empty">Sem dados neste relatório.</p>'
-    : `<table><thead><tr>${head}</tr></thead>\n${body}\n</table>`
-}`
+${content}`
 }
 </body></html>`
 }

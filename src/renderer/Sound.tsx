@@ -4,6 +4,7 @@ import type { SceneInfo } from '../shared/production'
 import type { Report } from '../shared/reports'
 import { SoundPlanView } from './SoundPlan'
 import { SoundSheetView } from './SoundSheet'
+import { AmbiencesView } from './Ambiences'
 
 interface Props {
   sound: Sound
@@ -41,7 +42,10 @@ export function SoundView(p: Props): JSX.Element {
       {tab === 'sheets' && (
         <SoundSheetView sound={p.sound} maps={p.maps} scenes={p.scenes} sceneId={p.sceneId} onChange={p.onChange} onExportPdf={p.onExportPdf} />
       )}
-      {(tab === 'library' || tab === 'equipment') && <p className="muted">Em breve.</p>}
+      {tab === 'library' && (
+        <AmbiencesView sound={p.sound} scenes={p.scenes} sceneId={p.sceneId} onChange={p.onChange} onExportPdf={p.onExportPdf} onExportCsv={p.onExportCsv} />
+      )}
+      {tab === 'equipment' && <p className="muted">Em breve.</p>}
     </div>
   )
 }

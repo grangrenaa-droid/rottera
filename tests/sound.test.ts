@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cleanSound, emptySheet, emptySound, micsOfScene, newMic, plansOfScene, reconcileSound, sheetsReport } from '../src/shared/sound'
+import { cleanSound, emptySheet, emptySound, micsOfScene, newMic, plansOfScene, reconcileSound, sheetsReport, musicReport, ambiencesReport } from '../src/shared/sound'
 import type { SceneInfo } from '../src/shared/production'
 import { parseScriptFile, serialize } from '../src/shared/scriptfile'
 import type { LightMap, Script, Sound } from '../src/shared/types'
@@ -129,5 +129,25 @@ describe('the sound sheets as a report', () => {
     expect(rows[0]).toEqual(['Quem fala', 'MARINA: lapela\nDAVI: vara'])
     expect(rows[1][0]).toBe('Microfones')
     expect(rows[1][1]).toContain('Lapela 2 presa em Luísa')
+  })
+})
+
+describe('ambiences and music as reports', () => {
+  const scene = (id: string, number: string, n: number): SceneInfo => ({
+    n, index: n * 10, end: n * 10 + 5, id, number, heading: 'INT. X - DIA', intExt: 'INT.', location: 'X', time: 'DIA',
+    night: false, eighths: 8, page: 1, cast: [], synopsis: ''
+  })
+
+  it('a song names its scenes by their numbers now, after a scene moved', () => {
+    const r = musicReport([scene('s2', '1', 0), scene('s1', '2', 1)], sound())
+    expect(r.id).toBe('musicas')
+    expect(r.columns).toEqual(['Título', 'Autor', 'Cenas', 'Tipo', 'Duração', 'Direitos', 'Observações'])
+    expect(r.rows).toEqual([['Valsa', 'Ana', '2', 'Toca na cena', '02:30', 'Pendente', '—']])
+  })
+
+  it('lists what to record at each location', () => {
+    const r = ambiencesReport(sound())
+    expect(r.columns).toEqual(['Locação', 'O que gravar', 'Duração', 'Gravado', 'Observações'])
+    expect(r.rows).toEqual([['CINE ESTRELA', 'Ruído do projetor', '1 min', 'Não', '—']])
   })
 })

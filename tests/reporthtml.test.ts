@@ -172,3 +172,23 @@ describe('cells with more than one line', () => {
     expect(h).toMatch(/td \{[^}]*white-space: pre-line/)
   })
 })
+
+describe('several tables on one page', () => {
+  it('prints each table after the other, each with its heading, and leaves out its empty columns', () => {
+    const h = buildReportHtml({
+      ...base,
+      title: 'Ambientes e músicas',
+      columns: [],
+      rows: [],
+      tables: [
+        { title: 'Ambientes e sons-guia', columns: ['Locação', 'O que gravar', 'Observações'], rows: [['COZINHA', 'Geladeira', '—']] },
+        { title: 'Músicas', columns: ['Título', 'Autor'], rows: [['Valsa', 'Ana']] }
+      ]
+    })
+    expect(h.match(/<h2>/g)).toHaveLength(2)
+    expect(h.match(/<table>/g)).toHaveLength(2)
+    expect(h).toContain('<h2>Músicas</h2>')
+    expect(h).not.toContain('Observações')
+    expect(h).not.toContain('Sem dados neste relatório')
+  })
+})

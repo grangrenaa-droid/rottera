@@ -1,11 +1,13 @@
 import type { Block, Script } from './types'
-import type { CallSheet, ReportSection } from './reportHtml'
+import type { CallSheet, ReportSection, ReportTable } from './reportHtml'
 import { LABELS, KINDS } from './elements'
 import { paginate } from './paginate'
 import { parseHeading } from './smarttype'
 import { sceneNumbers } from './scenes'
 import { revisionLabel } from './revisions'
 import { electricLoad, gearList } from './lightmap'
+import { equipmentReport, soundAutoLines } from './equipment'
+import { emptySound, musicReport } from './sound'
 import { breakdownReport, elementsReport, emptyProduction, intExt, sceneInfo, sceneShots, scheduleReport } from './production'
 
 export interface Report {
@@ -15,7 +17,7 @@ export interface Report {
   /** The flat table: what the screen and the CSV show. */
   rows: (string | number)[][]
   /** How the PDF prints it when that differs: in groups with headings (a shooting plan, day by day), or as a day sheet. */
-  printed?: { columns: string[]; sections: ReportSection[]; callsheet?: CallSheet }
+  printed?: { columns: string[]; sections: ReportSection[]; callsheet?: CallSheet; tables?: ReportTable[] }
 }
 
 /** What goes to the PDF: the groups when the report has them, the flat table otherwise. */
@@ -25,9 +27,11 @@ export function printable(r: Pick<Report, 'title' | 'columns' | 'rows' | 'printe
   rows: (string | number)[][]
   sections?: ReportSection[]
   callsheet?: CallSheet
+  tables?: ReportTable[]
 } {
   if (!r.printed) return { title: r.title, columns: r.columns, rows: r.rows }
   const out = { title: r.title, columns: r.printed.columns, rows: [], sections: r.printed.sections }
+  if (r.printed.tables) return { ...out, tables: r.printed.tables }
   return r.printed.callsheet ? { ...out, callsheet: r.printed.callsheet } : out
 }
 
@@ -272,7 +276,11 @@ export function buildReports(script: Script): Report[] {
       : []
   }
 
-  return [r1, r2, r3, r4, r5, r6, r7, r8, r1b, shots, equipment, breakdownReport(info, prod), elementsReport(info, prod), scheduleReport(info, prod, sceneShots(frames, info))]
+  // sound: the music list and the sound equipment (Som window)
+  const sound = script.sound ?? emptySound()
+  const soundEquipment = equipmentReport('Equipamento de som', soundAutoLines(sound), sound.equipment, sound.equipState, 'equipamento-som')
+
+  return [r1, r2, r3, r4, r5, r6, r7, r8, r1b, shots, equipment, breakdownReport(info, prod), elementsReport(info, prod), scheduleReport(info, prod, sceneShots(frames, info)), musicReport(info, sound), soundEquipment]
 }
 
 export function reportToCsv(r: Report): string {

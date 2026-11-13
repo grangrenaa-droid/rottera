@@ -259,3 +259,37 @@ export function sheetsReport(scenes: SceneInfo[], sound: Sound, maps: LightMap[]
   }
   return { id: 'fichas-som', title: 'Fichas de som', columns: ['Cena', 'Item', 'Anotação'], rows: flat, printed: { columns: ['Item', 'Anotação'], sections } }
 }
+
+const yesNo = (v: boolean): string => (v ? 'Sim' : 'Não')
+const dash = (s: string): string => s.trim() || '—'
+
+export const SONG_KIND: Record<Song['kind'], string> = { diegetic: 'Toca na cena', score: 'Trilha' }
+export const SONG_RIGHTS: Record<Song['rights'], string> = { licensed: 'Licenciada', pending: 'Pendente', original: 'Original', public: 'Domínio público' }
+
+/** What to record at each location besides the dialogue. */
+export function ambiencesReport(sound: Sound): Report {
+  return {
+    id: 'ambientes',
+    title: 'Ambientes e sons-guia',
+    columns: ['Locação', 'O que gravar', 'Duração', 'Gravado', 'Observações'],
+    rows: sound.ambiences.map((a) => [a.location, dash(a.what), dash(a.duration), yesNo(a.recorded), dash(a.notes)])
+  }
+}
+
+/** The music list; a song's scenes are written by their numbers as they are now (a song follows its scenes). */
+export function musicReport(scenes: SceneInfo[], sound: Sound): Report {
+  const number = new Map(scenes.filter((s) => s.id).map((s) => [s.id as string, s]))
+  return {
+    id: 'musicas',
+    title: 'Músicas',
+    columns: ['Título', 'Autor', 'Cenas', 'Tipo', 'Duração', 'Direitos', 'Observações'],
+    rows: sound.music.map((m) => {
+      const at = m.scenes
+        .map((id) => number.get(id))
+        .filter((s): s is SceneInfo => !!s)
+        .sort((a, b) => a.n - b.n)
+        .map((s) => s.number)
+      return [dash(m.title), dash(m.author), at.join(', ') || '—', SONG_KIND[m.kind], dash(m.duration), SONG_RIGHTS[m.rights], dash(m.notes)]
+    })
+  }
+}

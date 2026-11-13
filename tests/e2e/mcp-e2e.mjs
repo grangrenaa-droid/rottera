@@ -255,7 +255,7 @@ check(
 const rp = await tool('get_reports', { id: 'personagens' })
 check('report personagens', rp.rows.some((r) => r[0] === 'MARINA'), JSON.stringify(rp).slice(0, 200))
 const all = await tool('get_reports')
-check('fourteen reports, the last three from Filmagem', all.length === 14 && all.at(-1).id === 'plano', all.length)
+check('sixteen reports: Filmagem, then music and sound equipment last', all.length === 16 && all.at(-3).id === 'plano' && all.at(-1).id === 'equipamento-som', all.length)
 
 // notes: the writer leaves a note, the AI reads it, rewrites the line and marks the note resolved
 {

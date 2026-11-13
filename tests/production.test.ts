@@ -208,7 +208,7 @@ describe('production in the file', () => {
 
   it('shows up in Relatórios', () => {
     const ids = buildReports(script).map((r) => r.id)
-    expect(ids.slice(-3)).toEqual(['decupagem', 'elementos-producao', 'plano'])
+    expect(ids.slice(-5, -2)).toEqual(['decupagem', 'elementos-producao', 'plano'])
   })
 })
 

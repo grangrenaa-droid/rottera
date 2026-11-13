@@ -1,6 +1,6 @@
 import type { Block, Paper, Script } from './types'
 import type { AiClient } from './aiclients'
-import type { CallSheet, ReportSection } from './reportHtml'
+import type { CallSheet, ReportSection, ReportTable } from './reportHtml'
 
 export interface OpenResult {
   path: string
@@ -114,6 +114,8 @@ export interface ReportPdfRequest {
   sections?: ReportSection[]
   /** A shooting day printed as a day sheet (ordem do dia) instead of a table. */
   callsheet?: CallSheet
+  /** Several tables, one after the other (ambiences, then music). */
+  tables?: ReportTable[]
   scriptTitle: string
   paper: 'a4' | 'letter'
   landscape: boolean
