@@ -89,3 +89,7 @@
   .snd-plan { grid-template-columns: 200px minmax(0, 1fr); }
   .snd-panel { grid-column: 1 / -1; max-height: none; }
 }
+
+/* a line from the drawings: the type, then its model to edit */
+.equipment-table .eq-auto-name { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.equipment-table .eq-auto-name .eq-model { width: 160px; flex: 0 1 160px; }

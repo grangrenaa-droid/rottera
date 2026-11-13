@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { EquipItem, EquipState } from '../shared/types'
 import type { Report } from '../shared/reports'
 import { reportToCsv } from '../shared/reports'
@@ -17,6 +18,32 @@ interface Props {
   onExportCsv(name: string, csv: string): void
   /** A line above the table (the light window: the load of the heaviest map). */
   note?: string
+  /** A line from the drawings got a new model: it changes on the drawings too. */
+  onRename(key: string, model: string): void
+}
+
+/** The model of a line from the drawings: typed freely, applied when leaving the field or on Enter (Esc undoes). */
+function ModelField(p: { value: string; label: string; onCommit(v: string): void }): JSX.Element {
+  const [draft, setDraft] = useState<string | null>(null)
+  const commit = (): void => {
+    if (draft !== null && draft.trim() !== p.value) p.onCommit(draft)
+    setDraft(null)
+  }
+  return (
+    <input
+      className="eq-model"
+      value={draft ?? p.value}
+      maxLength={80}
+      placeholder="modelo"
+      aria-label={p.label}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') commit()
+        if (e.key === 'Escape') setDraft(null)
+      }}
+    />
+  )
 }
 
 const NO_STATE: EquipState = { rental: '', out: false, back: false, notes: '' }
@@ -55,7 +82,7 @@ export function EquipmentView(p: Props): JSX.Element {
               <b className="eq-note">{p.note}</b>{' '}
             </>
           )}
-          {p.auto.length > 0 ? 'As linhas marcadas “da planta” vêm sozinhas dos desenhos; o resto você acrescenta.' : 'Acrescente o que vai ser alugado ou levado para o set.'}
+          {p.auto.length > 0 ? 'As linhas marcadas “da planta” vêm sozinhas dos desenhos; o modelo escrito nelas muda também na planta. O resto você acrescenta.' : 'Acrescente o que vai ser alugado ou levado para o set.'}
         </p>
         <div className="row">
           <button className="btn secondary" onClick={add}>
@@ -86,8 +113,10 @@ export function EquipmentView(p: Props): JSX.Element {
         <tbody>
           {p.auto.map((l) => (
             <tr key={l.key} className="eq-auto">
-              <td>
-                {l.name} <span className="eq-tag">da planta</span>
+              <td className="eq-auto-name">
+                <span>{l.base}</span>
+                <ModelField value={l.model} label={`Modelo de ${l.name}`} onCommit={(v) => p.onRename(l.key, v)} />
+                <span className="eq-tag">da planta</span>
               </td>
               <td className="eq-qty">{l.qty}</td>
               {common(l.name, { ...NO_STATE, ...p.state[l.key] }, (patch) => setState(l.key, patch))}

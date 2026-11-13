@@ -1,16 +1,70 @@
-import type { EquipItem, EquipState, LightItem, LightItemType, LightMap, Sound } from './types'
+import type { EquipItem, EquipState, Lighting, LightItem, LightItemType, LightMap, Mic, Sound } from './types'
 import { ITEM_DEFS, ITEM_TYPES, electricLoad, hasModel, mapWatts, wattsOf } from './lightmap'
 import type { Report } from './reports'
 import { MIC_DEFS, cleanEquipItem } from './sound'
 
 /**
- * A line of an equipment list that comes by itself from the drawings (the microphones on the sound plans; the lights
- * on the light maps, later). Its name and quantity are not edited; what is written on it is kept by `key`.
+ * A line of an equipment list that comes by itself from the drawings (the microphones on the sound plans, the
+ * equipment on the light maps). Its name is `base` (the type, fixed) and `model`; the model is edited on the list and
+ * changes on the drawings too (renameSoundModel, renameLightModel). The quantity is counted; what is written on the
+ * line (rental, out, back, notes) is kept by `key`.
  */
 export interface AutoLine {
   key: string
   name: string
+  base: string
+  model: string
   qty: number
+}
+
+/** Moves what was written on a line to its new key, when its model changed (the new key's own note wins). */
+function moveState(state: Record<string, EquipState>, from: string, to: string): Record<string, EquipState> {
+  if (from === to || !state[from]) return state
+  const next = { ...state }
+  if (!next[to]) next[to] = next[from]
+  delete next[from]
+  return next
+}
+
+/** The sound line `key` ("shotgun|MKH 416") gets a new model: every microphone of that type and model, on every plan. */
+export function renameSoundModel(sound: Sound, key: string, model: string): Sound {
+  const [type, old = ''] = key.split('|')
+  const now = model.trim().slice(0, 80)
+  const plans = sound.plans.map((p) => {
+    if (!p.mics.some((m) => m.type === type && (m.model?.trim() ?? '') === old)) return p
+    return {
+      ...p,
+      mics: p.mics.map((m) => {
+        if (m.type !== type || (m.model?.trim() ?? '') !== old) return m
+        const next: Mic = { ...m, model: now }
+        if (!now) delete next.model
+        return next
+      })
+    }
+  })
+  return { ...sound, plans, equipState: moveState(sound.equipState, key, `${type}|${now}`) }
+}
+
+/** The light line `key` ("fresnel|2000" or "fresnel|2000|Arri 2K") gets a new model, on every light map. */
+export function renameLightModel(maps: LightMap[], lighting: Lighting, key: string, model: string): { maps: LightMap[]; lighting: Lighting } {
+  const [type, watts, ...rest] = key.split('|')
+  const old = rest.join('|')
+  const now = model.trim().slice(0, 80)
+  const hit = (it: LightItem): boolean => it.type === type && String(wattsOf(it)) === watts && (it.model?.trim() ?? '') === old
+  const next = maps.map((m) => {
+    if (!m.items.some(hit)) return m
+    return {
+      ...m,
+      items: m.items.map((it) => {
+        if (!hit(it)) return it
+        const n: LightItem = { ...it, model: now }
+        if (!now) delete n.model
+        return n
+      })
+    }
+  })
+  const to = `${type}|${watts}${now ? `|${now}` : ''}`
+  return { maps: next, lighting: { ...lighting, equipState: moveState(lighting.equipState, key, to) } }
 }
 
 /**
@@ -25,7 +79,8 @@ export function soundAutoLines(sound: Sound): AutoLine[] {
       const model = m.model?.trim() ?? ''
       const key = `${m.type}|${model}`
       here.set(key, (here.get(key) ?? 0) + 1)
-      if (!lines.has(key)) lines.set(key, { key, name: model ? `${MIC_DEFS[m.type].label} · ${model}` : MIC_DEFS[m.type].label, qty: 0 })
+      const base = MIC_DEFS[m.type].label
+      if (!lines.has(key)) lines.set(key, { key, name: model ? `${base} · ${model}` : base, base, model, qty: 0 })
     }
     for (const [key, n] of here) {
       const line = lines.get(key) as AutoLine
@@ -86,8 +141,8 @@ export function lightAutoLines(maps: LightMap[]): AutoLine[] {
       if (!lines.has(key)) {
         const w = wattsOf(it)
         const model = it.model?.trim() ?? ''
-        const name = `${ITEM_DEFS[it.type].name}${w > 0 ? ` ${w.toLocaleString('pt-BR')} W` : ''}${model ? ` · ${model}` : ''}`
-        lines.set(key, { key, name, qty: 0, type: it.type, watts: w })
+        const base = `${ITEM_DEFS[it.type].name}${w > 0 ? ` ${w.toLocaleString('pt-BR')} W` : ''}`
+        lines.set(key, { key, name: model ? `${base} · ${model}` : base, base, model, qty: 0, type: it.type, watts: w })
       }
     }
     for (const [key, n] of here) {
@@ -97,7 +152,7 @@ export function lightAutoLines(maps: LightMap[]): AutoLine[] {
   }
   return [...lines.values()]
     .sort((a, b) => ITEM_TYPES.indexOf(a.type) - ITEM_TYPES.indexOf(b.type) || b.watts - a.watts)
-    .map(({ key, name, qty }) => ({ key, name, qty }))
+    .map(({ key, name, base, model, qty }) => ({ key, name, base, model, qty }))
 }
 
 /** The load of the heaviest light map: what one set draws at once. */

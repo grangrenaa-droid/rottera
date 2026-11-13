@@ -6,7 +6,7 @@ import { LightMapView } from './LightMap'
 import { LightSheetView } from './LightSheet'
 import { LightSunView } from './LightSun'
 import { EquipmentView } from './Equipment'
-import { heaviestLoad, lightAutoLines } from '../shared/equipment'
+import { heaviestLoad, lightAutoLines, renameLightModel } from '../shared/equipment'
 import { loadText } from '../shared/lightmap'
 
 interface Props {
@@ -78,6 +78,11 @@ export function LightView(p: Props): JSX.Element {
           onChange={(equipment, equipState) => p.onLighting({ ...p.lighting, equipment, equipState })}
           onExportPdf={(r) => p.onExportPdf(r, false)}
           onExportCsv={p.onExportCsv}
+          onRename={(key, model) => {
+            const r = renameLightModel(p.maps, p.lighting, key, model)
+            p.onMaps(r.maps)
+            p.onLighting(r.lighting)
+          }}
         />
       )}
     </div>

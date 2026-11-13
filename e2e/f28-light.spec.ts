@@ -200,9 +200,28 @@ test.describe('F28 the Luz window', () => {
     await expect(page.getByLabel('Modelo', { exact: true })).toHaveCount(0)
 
     await tab(page, 'Equipamento').click()
-    await expect(page.locator('tr', { hasText: 'Fresnel 1.000 W · Arri 1K' })).toContainText('da planta')
+    const line = page.locator('tr.eq-auto', { hasText: 'Fresnel 1.000 W' })
+    await expect(line).toContainText('da planta')
+    await expect(line.getByRole('textbox').first()).toHaveValue('Arri 1K')
     const saved = await saveAs(app, page, dialogs, join(dir, 'modelo.rottera'))
     expect(saved.lightMaps[0].items.find((i: { type: string }) => i.type === 'fresnel').model).toBe('Arri 1K')
+  })
+
+  test('F28-H7 renaming a line in Equipamento changes the model of those lights on the map', async ({ app, page, dialogs }) => {
+    const dir = await open(page, dialogs)
+    await menu(app, 'view-lightmap')
+    await page.getByRole('button', { name: 'Criar o primeiro mapa' }).click()
+    await page.locator('.lm-piece', { hasText: 'Fresnel' }).first().click()
+    await tab(page, 'Equipamento').click()
+    const model = page.getByLabel('Modelo de Fresnel 1.000 W')
+    await model.fill('Arri 1K')
+    await model.press('Enter')
+    await expect(page.locator('tr', { hasText: 'Fresnel 1.000 W' }).getByRole('textbox').first()).toHaveValue('Arri 1K')
+    const saved = await saveAs(app, page, dialogs, join(dir, 'renomeado.rottera'))
+    expect(saved.lightMaps[0].items.find((i: { type: string }) => i.type === 'fresnel').model).toBe('Arri 1K')
+    await tab(page, 'Planta').click()
+    await page.locator('.lm-items button', { hasText: 'Fresnel' }).first().click()
+    await expect(page.getByLabel('Modelo', { exact: true })).toHaveValue('Arri 1K')
   })
 
   test('F28-L1 the short Som and Luz buttons on the toolbar are wide enough to hit', async ({ page, dialogs }) => {

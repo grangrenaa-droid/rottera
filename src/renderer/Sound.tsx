@@ -6,7 +6,7 @@ import { SoundPlanView } from './SoundPlan'
 import { SoundSheetView } from './SoundSheet'
 import { AmbiencesView } from './Ambiences'
 import { EquipmentView } from './Equipment'
-import { soundAutoLines } from '../shared/equipment'
+import { renameSoundModel, soundAutoLines } from '../shared/equipment'
 
 interface Props {
   sound: Sound
@@ -62,6 +62,7 @@ export function SoundView(p: Props): JSX.Element {
           onChange={(equipment, equipState) => p.onChange({ ...p.sound, equipment, equipState })}
           onExportPdf={(r) => p.onExportPdf(r, false)}
           onExportCsv={p.onExportCsv}
+          onRename={(key, model) => p.onChange(renameSoundModel(p.sound, key, model))}
         />
       )}
     </div>

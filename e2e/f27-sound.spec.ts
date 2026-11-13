@@ -121,7 +121,8 @@ test.describe('F27 the Som window', () => {
     await page.getByLabel('Modelo').fill('MKH 416')
 
     await page.getByRole('group', { name: 'Som' }).getByRole('button', { name: 'Equipamento' }).click()
-    const row = page.locator('tr', { hasText: 'Shotgun · MKH 416' })
+    const row = page.locator('tr.eq-auto', { hasText: 'Shotgun' })
+    await expect(row.getByRole('textbox').first()).toHaveValue('MKH 416')
     await expect(row).toContainText('da planta')
     await expect(row.locator('.eq-qty')).toHaveText('1')
     await page.getByLabel('Shotgun · MKH 416 retirado').check()
@@ -250,6 +251,27 @@ test.describe('F27 the Som window', () => {
     await page.getByRole('button', { name: 'Mais' }).click()
     await page.getByRole('button', { name: 'Exportar…', exact: true }).click()
     await expect(page.getByRole('button', { name: /Plantas de som/ })).toBeEnabled()
+  })
+
+  test('F27-H6 renaming a microphone line in Equipamento changes the model on the plan', async ({ app, page, dialogs, userData }) => {
+    await open(page, dialogs)
+    expect((await rpc(userData, 'create_lightmap', { name: 'Cozinha', scene: '1', width: 6, height: 4 })).ok).toBe(true)
+    await menu(app, 'view-sound')
+    await page.locator('.snd-plans button', { hasText: 'Cozinha' }).click()
+    await page.getByRole('button', { name: 'Pôr Shotgun' }).click()
+    await page.getByLabel('Modelo').fill('MKH 416')
+    await page.getByRole('group', { name: 'Som' }).getByRole('button', { name: 'Equipamento' }).click()
+    await page.getByLabel('Shotgun · MKH 416 retirado').check()
+    const model = page.getByLabel('Modelo de Shotgun · MKH 416')
+    await model.fill('MKH 50')
+    await model.press('Enter')
+    await expect(page.locator('tr', { hasText: 'Shotgun' }).getByRole('textbox').first()).toHaveValue('MKH 50')
+    // what was written on the line goes along
+    await expect(page.getByLabel('Shotgun · MKH 50 retirado')).toBeChecked()
+    await page.getByRole('group', { name: 'Som' }).getByRole('button', { name: 'Planta' }).click()
+    await page.locator('.snd-plans button', { hasText: 'Cozinha' }).click()
+    await page.locator('.snd-surface [data-mic] circle[fill="#fff"]').click()
+    await expect(page.getByLabel('Modelo')).toHaveValue('MKH 50')
   })
 
   test('F27-A1 the four tabs of the Som window have no serious accessibility violations, light and dark', async ({ app, page, dialogs, userData }) => {
