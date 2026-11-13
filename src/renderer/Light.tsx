@@ -4,6 +4,7 @@ import type { SceneInfo } from '../shared/production'
 import type { Report } from '../shared/reports'
 import { LightMapView } from './LightMap'
 import { LightSheetView } from './LightSheet'
+import { LightSunView } from './LightSun'
 
 interface Props {
   maps: LightMap[]
@@ -60,7 +61,10 @@ export function LightView(p: Props): JSX.Element {
           onExportPdf={p.onExportPdf}
         />
       )}
-      {(tab === 'sun' || tab === 'equipment') && <p className="muted">Em breve.</p>}
+      {tab === 'sun' && (
+        <LightSunView lighting={p.lighting} production={p.production} scenes={p.scenes} onLighting={p.onLighting} onProduction={p.onProduction} onExportPdf={p.onExportPdf} />
+      )}
+      {tab === 'equipment' && <p className="muted">Em breve.</p>}
     </div>
   )
 }
