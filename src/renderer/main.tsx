@@ -8,6 +8,7 @@ import './features.css'
 import './storyboard.css'
 import './lightmap.css'
 import './sound.css'
+import './light.css'
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
 

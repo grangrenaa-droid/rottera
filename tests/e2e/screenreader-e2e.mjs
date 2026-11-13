@@ -87,7 +87,7 @@ dump = await ps(['-Mode', 'dump'])
 rows = dump.map((l) => l.split('|'))
 check('editor: every focusable control has a name', content(rows).every((r) => r[1] && r[1].trim() !== ''), JSON.stringify(content(rows).filter((r) => !r[1])))
 check('editor: the script text is an edit control named "Texto do roteiro"', rows.some((r) => /Edit|Document/.test(r[0]) && /Texto do roteiro/.test(r[1])), JSON.stringify(rows.filter((r) => /Edit|Document/.test(r[0]))))
-const expectedButtons = ['Início', 'Roteiro', 'Beat Board', 'Storyboard', 'Mapa de Luz', 'Relatórios', 'Navegador', 'Localizar', 'Diálogo duplo', 'Exportar PDF']
+const expectedButtons = ['Início', 'Roteiro', 'Beat Board', 'Storyboard', 'Luz', 'Relatórios', 'Navegador', 'Localizar', 'Diálogo duplo', 'Exportar PDF']
 for (const want of expectedButtons) {
   check(`editor: "${want}" is a named button`, rows.some((r) => r[0] === 'Button' && r[1].startsWith(want)), JSON.stringify(rows.map((r) => r[1])))
 }

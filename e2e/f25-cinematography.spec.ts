@@ -9,7 +9,7 @@ test.afterEach(({ errors }) => {
 })
 
 async function lightMapTab(page: Page): Promise<void> {
-  await page.locator('.seg button', { hasText: /^Mapa de Luz$/ }).click()
+  await page.locator('.seg button', { hasText: /^Luz$/ }).click()
   await page.getByRole('button', { name: 'Criar o primeiro mapa' }).click()
 }
 // by the accessible name: some icons draw a letter (the H of the HMI) that would join the button's text

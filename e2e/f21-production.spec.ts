@@ -229,7 +229,7 @@ test.describe('F21 breakdown, shooting plan and scene links', () => {
     await menu(app, 'view-shooting')
     await scene(page, 'RUA').click()
     await page.getByRole('button', { name: 'Mapa de luz: Rua molhada' }).click()
-    await expect(page.locator('.seg button[aria-pressed="true"]')).toHaveText('Mapa de Luz')
+    await expect(page.locator('.toolbar .seg button[aria-pressed="true"]')).toHaveText('Luz')
 
     // picking another scene by hand moves the link
     await page.locator('.seg button', { hasText: /^Storyboard$/ }).click()

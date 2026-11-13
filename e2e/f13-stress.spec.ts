@@ -190,12 +190,12 @@ test('F13 a 300 page script with storyboard, light maps and sheets stays usable'
   })
   // plain CSS locators here: Playwright's role/name lookup alone takes seconds on a DOM this big and would be measured as the app's time
   await clock('open-lightmap-tab', async () => {
-    await page.locator('button', { hasText: /^Mapa de Luz$/ }).click()
+    await page.locator('button', { hasText: /^Luz$/ }).click()
     await expect(page.locator('svg').first()).toBeVisible({ timeout: 30_000 })
   })
   await tab('Roteiro').click()
   await clock('open-lightmap-tab-again', async () => {
-    await page.locator('button', { hasText: /^Mapa de Luz$/ }).click()
+    await page.locator('button', { hasText: /^Luz$/ }).click()
     await expect(page.locator('svg').first()).toBeVisible({ timeout: 30_000 })
   })
 

@@ -100,7 +100,7 @@ test.describe('F06 planning panels', () => {
 
   test('F06-L1 Mapa de Luz: shrinking the set keeps every piece inside it', async ({ page }) => {
     await newScript(page)
-    await page.getByRole('button', { name: 'Mapa de Luz' }).click()
+    await page.getByRole('button', { name: 'Luz', exact: true }).click()
     await page.getByRole('button', { name: 'Criar o primeiro mapa' }).click()
     await page.getByLabel('Largura (m)').fill('20')
     await page.locator('.lm-piece', { hasText: 'Câmera' }).click()
@@ -116,7 +116,7 @@ test.describe('F06 planning panels', () => {
 
   test('F06-L2 Mapa de Luz: labels are shown as text, never as markup', async ({ page }) => {
     await newScript(page)
-    await page.getByRole('button', { name: 'Mapa de Luz' }).click()
+    await page.getByRole('button', { name: 'Luz', exact: true }).click()
     await page.getByRole('button', { name: 'Criar o primeiro mapa' }).click()
     await page.locator('.lm-piece', { hasText: 'Fresnel' }).click()
     await page.getByLabel('Legenda').fill('<img src=x onerror=alert(1)> & "q"')
@@ -126,7 +126,7 @@ test.describe('F06 planning panels', () => {
 
   test('F06-L3 Mapa de Luz: rotation wraps at 360 and negative values', async ({ page }) => {
     await newScript(page)
-    await page.getByRole('button', { name: 'Mapa de Luz' }).click()
+    await page.getByRole('button', { name: 'Luz', exact: true }).click()
     await page.getByRole('button', { name: 'Criar o primeiro mapa' }).click()
     await page.locator('.lm-piece', { hasText: 'Câmera' }).click()
     await page.getByLabel('Rotação (°)').fill('-30')
@@ -137,7 +137,7 @@ test.describe('F06 planning panels', () => {
 
   test('F06-L4 Mapa de Luz: delete key removes the selected piece, undo brings it back', async ({ page }) => {
     await newScript(page)
-    await page.getByRole('button', { name: 'Mapa de Luz' }).click()
+    await page.getByRole('button', { name: 'Luz', exact: true }).click()
     await page.getByRole('button', { name: 'Criar o primeiro mapa' }).click()
     await page.locator('.lm-piece', { hasText: 'Ator ou atriz' }).click()
     await expect(page.locator('.lm-items li')).toHaveCount(1)
@@ -161,7 +161,7 @@ test.describe('accessibility scan (axe) on every screen', () => {
       ['Roteiro', null],
       ['Beat Board', 'Aplicar estrutura'],
       ['Storyboard', 'Quadro vazio'],
-      ['Mapa de Luz', 'Criar o primeiro mapa'],
+      ['Luz', 'Criar o primeiro mapa'],
       ['Relatórios', null]
     ] as const) {
       await page.getByRole('button', { name: tab, exact: true }).click()

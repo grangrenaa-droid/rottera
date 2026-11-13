@@ -155,12 +155,12 @@ test.describe('F11 narrow windows and display scaling', () => {
       await page.getByRole('button', { name: 'Storyboard', exact: true }).click()
       await page.getByRole('button', { name: 'Quadro vazio' }).click()
       await page.getByRole('button', { name: 'Quadro vazio' }).click()
-      await page.getByRole('button', { name: 'Mapa de Luz', exact: true }).click()
+      await page.getByRole('button', { name: 'Luz', exact: true }).click()
       await page.getByRole('button', { name: 'Criar o primeiro mapa' }).click()
       for (const t of ['Câmera', 'Ator ou atriz', 'Fresnel']) await page.locator('.lm-piece', { hasText: t }).click()
       await setView(app, page, s.w, s.h, s.zoom)
       const found: string[] = []
-      for (const tab of ['Beat Board', 'Storyboard', 'Mapa de Luz', 'Relatórios']) {
+      for (const tab of ['Beat Board', 'Storyboard', 'Luz', 'Relatórios']) {
         await page.getByRole('button', { name: tab, exact: true }).click()
         await page.waitForTimeout(150)
         for (const p of await layoutProblems(page)) found.push(`${tab}: ${p.kind}: ${p.what}`)

@@ -75,11 +75,11 @@ test.describe('F08 dark mode', () => {
     const fill: Record<string, string> = {
       'Beat Board': 'Aplicar estrutura',
       Storyboard: 'Quadro vazio',
-      'Mapa de Luz': 'Criar o primeiro mapa'
+      Luz: 'Criar o primeiro mapa'
     }
     for (const theme of ['night', 'midnight'] as const) {
       await setTheme(app, page, theme)
-      for (const tab of ['Roteiro', 'Beat Board', 'Storyboard', 'Mapa de Luz', 'Relatórios']) {
+      for (const tab of ['Roteiro', 'Beat Board', 'Storyboard', 'Luz', 'Relatórios']) {
         await page.getByRole('button', { name: tab, exact: true }).click()
         const extra = fill[tab]
         if (extra && theme === 'night') await page.getByRole('button', { name: extra }).click()
