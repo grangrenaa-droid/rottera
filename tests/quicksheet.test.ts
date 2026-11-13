@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseQuickMap, parseQuickSheet } from '../src/shared/quicksheet'
+import { parseMicLine, parseQuickMap, parseQuickSheet } from '../src/shared/quicksheet'
 
 describe('quick line of the technical sheet', () => {
   it('reads a light the way it is said on set', () => {
@@ -76,5 +76,34 @@ describe('quick line of the technical sheet', () => {
     const missing = parseQuickMap('8 x 6 cena 99', ['1'])
     expect(missing.patch).toEqual({ width: 8, height: 6 })
     expect(missing.unknown).toEqual(['cena 99 (não existe no roteiro)'])
+  })
+})
+
+describe('the quick line of a microphone', () => {
+  it('reads the type, the channel, the height and wireless', () => {
+    const r = parseMicLine('shotgun canal 1 a 2,1 m sem fio')
+    expect(r.patch).toEqual({ type: 'shotgun', channel: 1, height: 2.1, wireless: true })
+    expect(r.unknown).toEqual([])
+    expect(r.understood).toEqual(['Shotgun', 'canal 1', '2,1 m de altura', 'sem fio'])
+  })
+
+  it('reads the reach and the rotation', () => {
+    expect(parseMicLine('lapela alcance 0,5 m 90°').patch).toEqual({ type: 'lavalier', range: 0.5, rotation: 90 })
+  })
+
+  it('knows the other names of the types', () => {
+    expect(parseMicLine('omnidirecional').patch.type).toBe('omni')
+    expect(parseMicLine('bidirecional').patch.type).toBe('figure8')
+    expect(parseMicLine('figura 8').patch.type).toBe('figure8')
+    expect(parseMicLine('supercardioide').patch.type).toBe('supercardioid')
+    expect(parseMicLine('gravador').patch.type).toBe('recorder')
+  })
+
+  it('reads a position and keeps the channel inside 1 to 16', () => {
+    expect(parseMicLine('x 2 y 3,5 canal 40').patch).toEqual({ x: 2, y: 3.5, channel: 16 })
+  })
+
+  it('says which words it did not understand', () => {
+    expect(parseMicLine('cardioide banana').unknown).toEqual(['banana'])
   })
 })

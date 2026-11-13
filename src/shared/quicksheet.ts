@@ -1,5 +1,6 @@
-import type { LightItem, LightItemType, LightMap, LightRole, SensorId } from './types'
+import type { LightItem, LightItemType, LightMap, LightRole, Mic, MicType, SensorId } from './types'
 import { DIFFUSIONS, GELS, MOVES, ROLES, SHOTS, SENSORS, isLight, itemHasCone, itemHasDepth, itemHasLength } from './lightmap'
+import { MIC_DEFS } from './sound'
 
 /*
  * The quick lines of the light map: the person writes a piece's sheet the way it is said on set
@@ -309,4 +310,61 @@ export function parseQuickMap(text: string, scenes: string[]): QuickMapResult {
     }
   }
   return { patch, understood, unknown: [...bad, ...unknown()] }
+}
+
+const MIC_WORDS: [MicType, string[]][] = [
+  ['supercardioid', ['supercardioide', 'super cardioide', 'hipercardioide']],
+  ['cardioid', ['cardioide', 'unidirecional']],
+  ['shotgun', ['shotgun', 'shot gun', 'canhao', 'boom']],
+  ['omni', ['omnidirecional', 'omni']],
+  ['figure8', ['figura 8', 'figura oito', 'bidirecional']],
+  ['lavalier', ['lapela', 'lavalier']],
+  ['recorder', ['gravador', 'recorder']]
+]
+
+/**
+ * Reads the quick line of a microphone on a sound plan: its type ("shotgun", "lapela", "omni"…), recorder channel
+ * ("canal 2", kept within 1–16), height ("2,1 m"), reach ("alcance 3 m"), rotation ("90°"), position ("x 2 y 3,5")
+ * and "sem fio".
+ */
+export function parseMicLine(text: string): { patch: Partial<Mic>; understood: string[]; unknown: string[] } {
+  const { take, takeWord, field, unknown } = reader(text)
+  const patch: Partial<Mic> = {}
+  const understood: string[] = []
+  const type = takeWord(MIC_WORDS)
+  if (type) {
+    patch.type = type
+    understood.push(MIC_DEFS[type].label)
+  }
+  const ch = field('canal|ch|track|trilha', '')
+  if (ch !== undefined) {
+    patch.channel = clamp(Math.round(ch), 1, 16)
+    understood.push(`canal ${patch.channel}`)
+  }
+  const range = field('alcance|capta|captacao', 'm|metros?')
+  if (range !== undefined) {
+    patch.range = clamp(range, 0.1, 30)
+    understood.push(`alcance ${dec(patch.range)} m`)
+  }
+  const pair = take(new RegExp(`\\sx\\s?${NUM}\\s?(?:m\\s?)?(?:e\\s)?y\\s?${NUM}\\s?m?(?=\\s)`))
+  if (pair) {
+    patch.x = Number(pair[1])
+    patch.y = Number(pair[2])
+    understood.push(`x ${dec(patch.x)} y ${dec(patch.y)}`)
+  }
+  const deg = take(/\s(\d{1,3})\s?(?:°|º|graus?)(?=\s)/)
+  if (deg) {
+    patch.rotation = Number(deg[1]) % 360
+    understood.push(`rotação ${patch.rotation}°`)
+  }
+  const h = take(new RegExp(`\\s${NUM}\\s?(?:m|metros?)(?=\\s)`))
+  if (h) {
+    patch.height = clamp(Number(h[1]), 0, 20)
+    understood.push(`${dec(patch.height)} m de altura`)
+  }
+  if (take(/\ssem fio(?=\s)/) || takeWord([[true, ['wireless']]])) {
+    patch.wireless = true
+    understood.push('sem fio')
+  }
+  return { patch, understood, unknown: unknown() }
 }
