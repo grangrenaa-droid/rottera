@@ -188,6 +188,27 @@ test.describe('F27 the Som window', () => {
     await expect(page.locator('.snd-surface svg g[opacity="0.35"]')).toHaveCount(0)
   })
 
+  test('F27-E2 a sound plan left with no light map and no scene is still listed and can be deleted', async ({ app, page, dialogs, userData }) => {
+    const dir = await open(page, dialogs)
+    expect((await rpc(userData, 'create_lightmap', { name: 'Ensaio', width: 6, height: 4 })).ok).toBe(true)
+    await menu(app, 'view-sound')
+    await page.locator('.snd-plans button', { hasText: 'Ensaio' }).click()
+    await page.getByRole('button', { name: 'Pôr Shotgun' }).click()
+    await menu(app, 'view-lightmap')
+    await page.locator('.lm-side').getByRole('button', { name: 'Apagar', exact: true }).click()
+
+    await menu(app, 'view-sound')
+    const orphan = page.locator('.snd-plans button', { hasText: 'Planta sem cena' })
+    await expect(orphan).toContainText('1 microfone')
+    await orphan.click()
+    await expect(page.locator('.snd-surface [data-mic]')).toHaveCount(1)
+    page.once('dialog', (d) => void d.accept())
+    await page.getByRole('button', { name: 'Apagar planta de som' }).click()
+    await expect(orphan).toHaveCount(0)
+    const saved = await saveAs(app, page, dialogs, join(dir, 'sem-orfa.rottera'))
+    expect(saved.sound.plans).toEqual([])
+  })
+
   test('F27-A1 the four tabs of the Som window have no serious accessibility violations, light and dark', async ({ app, page, dialogs, userData }) => {
     await open(page, dialogs)
     expect((await rpc(userData, 'create_lightmap', { name: 'Cozinha', scene: '1', width: 6, height: 4 })).ok).toBe(true)

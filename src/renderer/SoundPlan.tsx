@@ -18,7 +18,7 @@ interface Props {
 }
 
 /** What the list on the left points at: a light map (its plan is made on first use) or a scene with no light map. */
-type Pick = { kind: 'map'; id: string } | { kind: 'scene'; index: number } | null
+type Pick = { kind: 'map'; id: string } | { kind: 'scene'; index: number } | { kind: 'plan'; id: string } | null
 
 interface Drag {
   id: string
@@ -52,13 +52,18 @@ export function SoundPlanView(p: Props): JSX.Element {
 
   const mapSids = new Set(p.maps.map((m) => m.sid).filter(Boolean))
   const loose = p.scenes.filter((s) => !s.id || !mapSids.has(s.id))
+  // plans with no light map whose scene is gone (or never had one): kept in the file, so they are listed to be seen or deleted
+  const sceneIds = new Set(p.scenes.map((s) => s.id).filter(Boolean))
+  const orphans = p.sound.plans.filter((x) => !x.mapId && (!x.sid || !sceneIds.has(x.sid)))
   const map = pick?.kind === 'map' ? p.maps.find((m) => m.id === pick.id) ?? null : null
   const scene = pick?.kind === 'scene' ? p.scenes[pick.index] ?? null : null
   const plan: SoundPlan | null = map
     ? p.sound.plans.find((x) => x.mapId === map.id) ?? null
     : scene && scene.id
       ? p.sound.plans.find((x) => !x.mapId && x.sid === scene.id) ?? null
-      : null
+      : pick?.kind === 'plan'
+        ? p.sound.plans.find((x) => x.id === pick.id) ?? null
+        : null
   // a sound-only plan whose scene got a light map since, with no plan of its own yet
   const lightNow = plan && !plan.mapId && plan.sid ? p.maps.find((m) => m.sid === plan.sid && !p.sound.plans.some((x) => x.mapId === m.id)) : undefined
   const selected = plan?.mics.find((m) => m.id === selId) ?? null
@@ -117,6 +122,13 @@ export function SoundPlanView(p: Props): JSX.Element {
     if (!plan) return
     putPlan(soundRef.current, { ...plan, mics: plan.mics.filter((m) => m.id !== id) })
     setSelId(null)
+  }
+  const removePlan = (): void => {
+    if (!plan) return
+    if (plan.mics.length > 0 && !window.confirm('Apagar esta planta de som e os microfones dela? O mapa de luz não muda.')) return
+    commit({ ...soundRef.current, plans: soundRef.current.plans.filter((x) => x.id !== plan.id) })
+    setSelId(null)
+    if (pick?.kind === 'plan') setPick(null)
   }
   const createStandalone = (): void => {
     if (!scene) return
@@ -251,6 +263,26 @@ export function SoundPlanView(p: Props): JSX.Element {
             )
           })}
         </ul>
+        {orphans.length > 0 && (
+          <>
+            <h3>Plantas sem cena</h3>
+            <ul>
+              {orphans.map((x) => {
+                const on = pick?.kind === 'plan' && pick.id === x.id
+                return (
+                  <li key={x.id}>
+                    <button aria-current={on} className={on ? 'on' : ''} onClick={() => (setPick({ kind: 'plan', id: x.id }), setSelId(null))}>
+                      <span>Planta sem cena{x.scene ? ` (era a cena ${x.scene})` : ''}</span>
+                      <span className="muted">
+                        {x.mics.length} {x.mics.length === 1 ? 'microfone' : 'microfones'}
+                      </span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </>
+        )}
       </nav>
 
       <section className="snd-main" aria-label="Planta de som">
@@ -418,6 +450,9 @@ export function SoundPlanView(p: Props): JSX.Element {
               Notas da planta
             </label>
             <textarea id="snd-notes" rows={3} maxLength={2000} value={plan.notes} onChange={(e) => putPlan(soundRef.current, { ...plan, notes: e.target.value })} />
+            <button className="btn ghost" onClick={removePlan}>
+              Apagar planta de som
+            </button>
           </>
         )}
       </aside>
