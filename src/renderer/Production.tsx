@@ -1,5 +1,5 @@
 import { useMemo, useState, type DragEvent } from 'react'
-import type { BreakdownCategory, Production } from '../shared/types'
+import type { BreakdownCategory, Frame, Production } from '../shared/types'
 import type { Report } from '../shared/reports'
 import { reportToCsv } from '../shared/reports'
 import {
@@ -12,20 +12,27 @@ import {
   dayLabel,
   dayReport,
   dayScenes,
+  entryOf,
   formatEighths,
   itemsOfScene,
+  looseParts,
   moveDay,
+  moveShot,
   removeDay,
   removeItem,
   scheduleReport,
   scheduleByLocation,
   sceneTime,
   scheduleScene,
+  sceneShots,
   setSceneTime,
+  setShotTime,
+  shotsByTime,
   splitDay,
   unscheduled,
   updateDay,
-  type SceneInfo
+  type SceneInfo,
+  type ShotInfo
 } from '../shared/production'
 
 /** What the storyboard and the light maps hold for a scene (see the scene links in App). */
@@ -37,6 +44,8 @@ export interface SceneLinks {
 interface Props {
   scenes: SceneInfo[]
   production: Production
+  /** The storyboard frames: each scene's shots, to plan and to list on the day sheets. */
+  frames: Frame[]
   onChange(p: Production): void
   /** The scene's id, given to its heading first if it has none. */
   sceneId(s: SceneInfo): string | null
@@ -217,31 +226,40 @@ const stripKind = (s: SceneInfo): string => `${s.intExt === 'INT.' ? 'int' : 'ex
 
 function Plan(p: Props): JSX.Element {
   const [sort, setSort] = useState<Sort>('script')
-  const [dragging, setDragging] = useState<string | null>(null)
+  // the strip being dragged: its scene, and the day it comes from (null = no day), for a scene in parts
+  const [dragging, setDragging] = useState<{ id: string; from: string | null } | null>(null)
   const [said, setSaid] = useState('')
   const prod = p.production
+  const shots = useMemo(() => sceneShots(p.frames, p.scenes), [p.frames, p.scenes])
+  const shotIds = (s: SceneInfo): string[] => ((s.id && shots.get(s.id)) || []).map((x) => x.id)
   const pool = useMemo(() => {
-    const list = unscheduled(p.scenes, prod)
+    // the scenes with no day, and the parts of scenes whose other shots are on a day
+    const list = [...unscheduled(p.scenes, prod), ...looseParts(p.scenes, prod, shots)].sort((a, b) => a.n - b.n)
     if (sort === 'location') return [...list].sort((a, b) => a.location.localeCompare(b.location, 'pt-BR') || a.n - b.n)
     if (sort === 'daynight') return [...list].sort((a, b) => Number(a.night) - Number(b.night) || a.location.localeCompare(b.location, 'pt-BR') || a.n - b.n)
     return list
-  }, [p.scenes, prod, sort])
+  }, [p.scenes, prod, sort, shots])
   const total = p.scenes.reduce((t, s) => t + s.eighths, 0)
   const planned = p.scenes.length - unscheduled(p.scenes, prod).length
 
-  const move = (s: SceneInfo, dayId: string | null, at?: number): void => {
+  /** Moves a strip: a whole scene, or (for a scene in parts) only the part that is on day `from`. */
+  const move = (s: SceneInfo, from: string | null, dayId: string | null, at?: number): void => {
     const id = p.sceneId(s)
-    if (id) p.onChange(scheduleScene(prod, id, dayId, at))
+    if (id) p.onChange(scheduleScene(prod, id, dayId, at, { from, all: shotIds(s) }))
+  }
+  const sendShot = (s: SceneInfo, shot: ShotInfo, dayId: string | null): void => {
+    if (s.id) p.onChange(moveShot(prod, s.id, shotIds(s), shot.id, dayId))
   }
   const byId = (id: string | null): SceneInfo | undefined => p.scenes.find((s) => s.id === id)
   const drop = (e: DragEvent, dayId: string | null, at?: number): void => {
     e.preventDefault()
     e.stopPropagation()
-    const s = byId(dragging)
+    const d = dragging
     setDragging(null)
-    if (s) move(s, dayId, at)
+    const s = d && byId(d.id)
+    if (d && s) move(s, d.from, dayId, at)
   }
-  const exportPlan = (): void => p.onExportPdf(scheduleReport(p.scenes, prod), true)
+  const exportPlan = (): void => p.onExportPdf(scheduleReport(p.scenes, prod, shots), true)
   const byLocation = (): void => {
     const r = scheduleByLocation(p.scenes, prod, p.sceneIds)
     if (r.scenes === 0) return
@@ -254,81 +272,135 @@ function Plan(p: Props): JSX.Element {
     if (id) p.onChange(splitDay(prod, dayId, id))
   }
 
-  const strip = (s: SceneInfo, where: { dayId: string | null; pos: number; count: number }): JSX.Element => (
-    <li
-      key={s.index}
-      className={['strip', where.dayId !== null ? 'timed' : '', dragging !== null && dragging === s.id ? 'dragging' : ''].filter(Boolean).join(' ')}
-      data-strip={stripKind(s)}
-      draggable
-      onDragStart={(e) => {
-        const id = p.sceneId(s)
-        setDragging(id)
-        if (id) e.dataTransfer.setData('text/plain', id)
-      }}
-      onDragEnd={() => setDragging(null)}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => drop(e, where.dayId, where.dayId === null ? undefined : where.pos)}
-    >
-      <b className="strip-n">{s.number}</b>
-      {where.dayId !== null && (
-        <input
-          type="time"
-          className="strip-time"
-          aria-label={`Horário da cena ${s.number}`}
-          title="Horário em que a cena será filmada"
-          value={(() => {
-            const d = prod.days.find((x) => x.id === where.dayId)
-            return d && s.id ? sceneTime(d, s.id) : ''
-          })()}
-          onChange={(e) => s.id && where.dayId && p.onChange(setSceneTime(prod, where.dayId, s.id, e.target.value))}
-          // a time field must not start a drag of the strip
-          draggable={false}
-          onDragStart={(e) => e.preventDefault()}
-        />
-      )}
-      <span className="strip-ie">{s.intExt}</span>
-      <span className="strip-loc" title={s.synopsis ? `${s.heading}\n${s.synopsis}` : s.heading}>
-        {s.location || s.heading || '—'}
-      </span>
-      <span className="strip-dn">{s.night ? 'N' : 'D'}</span>
-      <span className="strip-pg">{formatEighths(s.eighths)}</span>
-      <span className="strip-cast" title={s.cast.join(', ')}>
-        {s.cast.length ? s.cast.join(', ') : '—'}
-      </span>
-      <span className="strip-ctl">
+  const strip = (s: SceneInfo, where: { dayId: string | null; pos: number; count: number }): JSX.Element => {
+    const day = where.dayId === null ? null : prod.days.find((x) => x.id === where.dayId) ?? null
+    const entry = entryOf(s, prod, shots, day)
+    const all = (s.id && shots.get(s.id)) || []
+    return (
+      <li
+        key={s.index}
+        className={[
+          'strip',
+          where.dayId !== null ? 'timed' : '',
+          entry.part ? 'part' : '',
+          dragging !== null && dragging.id === s.id && dragging.from === where.dayId ? 'dragging' : ''
+        ]
+          .filter(Boolean)
+          .join(' ')}
+        data-strip={stripKind(s)}
+        draggable
+        onDragStart={(e) => {
+          const id = p.sceneId(s)
+          setDragging(id ? { id, from: where.dayId } : null)
+          if (id) e.dataTransfer.setData('text/plain', id)
+        }}
+        onDragEnd={() => setDragging(null)}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => drop(e, where.dayId, where.dayId === null ? undefined : where.pos)}
+      >
+        <b className="strip-n">
+          {s.number}
+          {entry.part && <span className="strip-part"> parte</span>}
+        </b>
         {where.dayId !== null && (
-          <>
-            <button className="icon" aria-label={`Subir cena ${s.number} no dia`} disabled={where.pos === 0} onClick={() => move(s, where.dayId, where.pos - 1)}>
-              ↑
-            </button>
-            <button className="icon" aria-label={`Descer cena ${s.number} no dia`} disabled={where.pos === where.count - 1} onClick={() => move(s, where.dayId, where.pos + 1)}>
-              ↓
-            </button>
-            <button
-              className="icon"
-              aria-label={`Partir o dia antes da cena ${s.number}`}
-              title="Partir o dia aqui: esta cena e as de baixo vão para um dia novo"
-              disabled={where.pos === 0}
-              onClick={() => where.dayId && split(s, where.dayId)}
-            >
-              ✂
-            </button>
-          </>
+          <input
+            type="time"
+            className="strip-time"
+            aria-label={`Horário da cena ${s.number}`}
+            title="Horário em que a cena será filmada"
+            value={(() => {
+              const d = prod.days.find((x) => x.id === where.dayId)
+              return d && s.id ? sceneTime(d, s.id) : ''
+            })()}
+            onChange={(e) => s.id && where.dayId && p.onChange(setSceneTime(prod, where.dayId, s.id, e.target.value))}
+            // a time field must not start a drag of the strip
+            draggable={false}
+            onDragStart={(e) => e.preventDefault()}
+          />
         )}
-        <label className="sr-only" htmlFor={`day-of-${s.index}`}>
-          Dia da cena {s.number}
-        </label>
-        <select id={`day-of-${s.index}`} value={where.dayId ?? ''} onChange={(e) => move(s, e.target.value || null)}>
-          <option value="">Sem dia</option>
-          {prod.days.map((d, n) => (
-            <option key={d.id} value={d.id}>
-              {dayLabel(d, n)}
-            </option>
-          ))}
-        </select>
-      </span>
-    </li>
-  )
+        <span className="strip-ie">{s.intExt}</span>
+        <span className="strip-loc" title={s.synopsis ? `${s.heading}\n${s.synopsis}` : s.heading}>
+          {s.location || s.heading || '—'}
+        </span>
+        <span className="strip-dn">{s.night ? 'N' : 'D'}</span>
+        <span className="strip-pg">{formatEighths(entry.eighths)}</span>
+        <span className="strip-cast" title={s.cast.join(', ')}>
+          {s.cast.length ? s.cast.join(', ') : '—'}
+        </span>
+        <span className="strip-ctl">
+          {where.dayId !== null && (
+            <>
+              <button className="icon" aria-label={`Subir cena ${s.number} no dia`} disabled={where.pos === 0} onClick={() => move(s, where.dayId, where.dayId, where.pos - 1)}>
+                ↑
+              </button>
+              <button className="icon" aria-label={`Descer cena ${s.number} no dia`} disabled={where.pos === where.count - 1} onClick={() => move(s, where.dayId, where.dayId, where.pos + 1)}>
+                ↓
+              </button>
+              <button
+                className="icon"
+                aria-label={`Partir o dia antes da cena ${s.number}`}
+                title="Partir o dia aqui: esta cena e as de baixo vão para um dia novo"
+                disabled={where.pos === 0}
+                onClick={() => where.dayId && split(s, where.dayId)}
+              >
+                ✂
+              </button>
+            </>
+          )}
+          <label className="sr-only" htmlFor={`day-of-${s.index}-${where.dayId ?? 'none'}`}>
+            Dia da cena {s.number}
+          </label>
+          <select id={`day-of-${s.index}-${where.dayId ?? 'none'}`} value={where.dayId ?? ''} onChange={(e) => move(s, where.dayId, e.target.value || null)}>
+            <option value="">Sem dia</option>
+            {prod.days.map((d, n) => (
+              <option key={d.id} value={d.id}>
+                {dayLabel(d, n)}
+              </option>
+            ))}
+          </select>
+        </span>
+        {entry.shots.length > 0 && (
+          // the scene's shots from the storyboard, in the order they are filmed; with more than one, each can go to another day
+          <ul className="strip-shots" aria-label={`Planos da cena ${s.number}`}>
+            {shotsByTime(entry.shots).map((sh) => (
+              <li key={sh.id} title={sh.text}>
+                <span className="shot-code">{sh.code}</span> <span className="shot-text">{sh.text}</span>
+                {where.dayId !== null && s.id !== null && (
+                  <input
+                    type="time"
+                    className="shot-time"
+                    aria-label={`Horário do plano ${sh.code}`}
+                    title="Horário em que o plano será filmado"
+                    value={sh.time}
+                    onChange={(e) => where.dayId && s.id && p.onChange(setShotTime(prod, where.dayId, s.id, sh.id, e.target.value))}
+                    // a time field must not start a drag of the strip
+                    draggable={false}
+                    onDragStart={(e) => e.preventDefault()}
+                  />
+                )}
+                {all.length > 1 && (
+                  <select
+                    aria-label={`Dia do plano ${sh.code}`}
+                    value={where.dayId ?? ''}
+                    onChange={(e) => sendShot(s, sh, e.target.value || null)}
+                    draggable={false}
+                    onDragStart={(e) => e.preventDefault()}
+                  >
+                    <option value="">Sem dia</option>
+                    {prod.days.map((d, n) => (
+                      <option key={d.id} value={d.id}>
+                        {dayLabel(d, n)}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </li>
+    )
+  }
 
   return (
     <div className="plan">
@@ -351,7 +423,7 @@ function Plan(p: Props): JSX.Element {
           <button className="btn secondary" onClick={exportPlan}>
             Exportar plano (PDF)
           </button>
-          <button className="btn secondary" onClick={() => p.onExportCsv('Plano de filmagem', reportToCsv(scheduleReport(p.scenes, prod)))}>
+          <button className="btn secondary" onClick={() => p.onExportCsv('Plano de filmagem', reportToCsv(scheduleReport(p.scenes, prod, shots)))}>
             Exportar CSV
           </button>
         </div>
@@ -388,7 +460,7 @@ function Plan(p: Props): JSX.Element {
           {prod.days.length === 0 && <p className="muted">Crie um dia com “Novo dia” e leve cenas para ele, arrastando ou escolhendo o dia na faixa.</p>}
           {prod.days.map((d, n) => {
             const list = dayScenes(d, p.scenes)
-            const e = list.reduce((t, s) => t + s.eighths, 0)
+            const e = list.reduce((t, s) => t + entryOf(s, prod, shots, d).eighths, 0)
             return (
               <section
                 key={d.id}
@@ -420,7 +492,7 @@ function Plan(p: Props): JSX.Element {
                     >
                       ↓
                     </button>
-                    <button className="btn ghost" onClick={() => p.onExportPdf(dayReport(d, n, p.scenes, prod), true)}>
+                    <button className="btn ghost" onClick={() => p.onExportPdf(dayReport(d, n, p.scenes, prod, shots), false)}>
                       Ordem do dia (PDF)
                     </button>
                     <button className="btn ghost" onClick={() => p.onChange(removeDay(prod, d.id))}>

@@ -162,6 +162,8 @@ label.stack { font-weight: 600; font-size: 12px; color: var(--color-text-muted);
 .report-body h2 { font-size: 20px; line-height: 28px; text-transform: none; letter-spacing: 0; color: var(--color-text); margin: 0; }
 table { border-collapse: collapse; width: 100%; background: var(--color-bg); }
 th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--color-border); }
+/* a cell with several lines (one shot per line) keeps them */
+.report-body td { white-space: pre-line; }
 th { background: var(--color-surface); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--color-text-muted); }
 
 /* ---- dialogs */
@@ -380,6 +382,16 @@ button.link:focus-visible { outline: 2px solid var(--color-focus-ring); outline-
 .strip-pg { text-align: right; font-variant-numeric: tabular-nums; }
 .strip-ctl { display: flex; align-items: center; gap: 2px; }
 .strip-ctl select { height: 28px; max-width: 130px; }
+/* a part of a scene (only some of its shots on this day) */
+.strip.part { border-style: dashed; }
+.strip-part { display: block; font-size: 10px; font-weight: 400; color: var(--color-text-muted); }
+/* the scene's shots from the storyboard, under the strip's line */
+.strip-shots { grid-column: 1 / -1; list-style: none; margin: 0; padding: 4px 0 0; border-top: 1px solid var(--color-border); display: grid; gap: 2px; cursor: default; }
+.strip-shots li { display: flex; align-items: center; gap: 6px; font-size: 12px; min-width: 0; }
+.shot-code { font-weight: 600; font-variant-numeric: tabular-nums; flex: none; }
+.shot-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-muted); }
+.strip-shots select { height: 24px; max-width: 130px; flex: none; font-size: 12px; }
+.shot-time { height: 24px; width: 96px; flex: none; box-sizing: border-box; font-size: 12px; font-variant-numeric: tabular-nums; }
 @media (max-width: 1100px) {
   .plan-cols, .prod-breakdown { grid-template-columns: 1fr; }
   .plan-pool, .prod-scenes { position: static; max-height: 40vh; }

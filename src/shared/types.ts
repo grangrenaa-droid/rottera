@@ -314,6 +314,13 @@ export interface ShootDay {
   scenes: string[]
   /** When each scene is shot that day ("08:30"), by scene id. Missing = no time yet. */
   times?: Record<string, string>
+  /**
+   * For a scene shot over more than one day: the storyboard frames (shots) of that scene shot on this day, by scene id.
+   * Missing for a scene = the scene is shot whole on this day.
+   */
+  shots?: Record<string, string[]>
+  /** When each shot is filmed that day ("09:00"): by scene id, then by storyboard frame id. */
+  shotTimes?: Record<string, Record<string, string>>
 }
 
 export interface Production {

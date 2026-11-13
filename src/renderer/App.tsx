@@ -1644,6 +1644,7 @@ export function App(): JSX.Element {
             <ProductionView
               scenes={shootingScenes}
               production={production}
+              frames={storyboard.frames}
               onChange={setProduction}
               sceneId={sceneIdOf}
               sceneIds={sceneIdsOf}

@@ -8,6 +8,43 @@ export interface ReportSection {
   rows: (string | number)[][]
 }
 
+/** One shot of a scene on a day sheet. */
+export interface CallSheetShot {
+  time: string
+  code: string
+  text: string
+}
+
+/** One scene (or the part of it) on a day sheet: its line, then what it needs. Empty fields are left out. */
+export interface CallSheetScene {
+  time: string
+  number: string
+  part: boolean
+  intExt: string
+  location: string
+  dn: string
+  pages: string
+  synopsis: string
+  /** In the order they are filmed. */
+  shots: CallSheetShot[]
+  cast: string
+  elements: string
+}
+
+/** A shooting day as the crew reads it on set (ordem do dia): a heading, then a block per scene. */
+export interface CallSheet {
+  day: string
+  /** "Dia 2 de 5". */
+  dayOf: string
+  /** The first time of the day, or ''. */
+  start: string
+  locations: string[]
+  /** "3 cenas · 1 2/8 pág.". */
+  summary: string
+  notes: string
+  scenes: CallSheetScene[]
+}
+
 /** A report table as a printable page. The paper size, orientation, header and footer are set by the printer call, not here. */
 export interface ReportPrint {
   title: string
@@ -15,6 +52,8 @@ export interface ReportPrint {
   rows: (string | number)[][]
   /** When given, the rows are printed in these groups (and `rows` is not used). */
   sections?: ReportSection[]
+  /** When given, the page is a day sheet instead of a table. */
+  callsheet?: CallSheet
   scriptTitle: string
 }
 
@@ -46,11 +85,95 @@ export function cleanReport(r: ReportPrint): ReportPrint {
         rows: clean(s?.rows)
       }))
     : undefined
-  return { title: String(r.title).slice(0, 200), columns: cols, rows: clean(r.rows), ...(sections ? { sections } : {}), scriptTitle: String(r.scriptTitle).slice(0, 200) }
+  const callsheet = r.callsheet && typeof r.callsheet === 'object' ? cleanCallSheet(r.callsheet) : undefined
+  return {
+    title: String(r.title).slice(0, 200),
+    columns: cols,
+    rows: clean(r.rows),
+    ...(sections ? { sections } : {}),
+    ...(callsheet ? { callsheet } : {}),
+    scriptTitle: String(r.scriptTitle).slice(0, 200)
+  }
+}
+
+const str = (v: unknown, max: number): string => (typeof v === 'string' || typeof v === 'number' ? String(v).slice(0, max) : '')
+const list = <T>(v: unknown, max: number, each: (x: Record<string, unknown>) => T): T[] =>
+  Array.isArray(v) ? v.slice(0, max).filter((x) => x && typeof x === 'object').map((x) => each(x as Record<string, unknown>)) : []
+
+function cleanCallSheet(c: CallSheet): CallSheet {
+  const x = c as unknown as Record<string, unknown>
+  return {
+    day: str(x.day, 200),
+    dayOf: str(x.dayOf, 100),
+    start: str(x.start, 20),
+    locations: Array.isArray(x.locations) ? x.locations.slice(0, 100).map((l) => str(l, 200)) : [],
+    summary: str(x.summary, 200),
+    notes: str(x.notes, MAX_CELL),
+    scenes: list(x.scenes, 2000, (s) => ({
+      time: str(s.time, 20),
+      number: str(s.number, 40),
+      part: s.part === true,
+      intExt: str(s.intExt, 40),
+      location: str(s.location, 200),
+      dn: str(s.dn, 4),
+      pages: str(s.pages, 20),
+      synopsis: str(s.synopsis, MAX_CELL),
+      shots: list(s.shots, 500, (h) => ({ time: str(h.time, 20), code: str(h.code, 40), text: str(h.text, 400) })),
+      cast: str(s.cast, MAX_CELL),
+      elements: str(s.elements, MAX_CELL)
+    }))
+  }
+}
+
+/** The day sheet: a heading with the day, then one block per scene with its shots, cast and elements. */
+function callSheetHtml(c: CallSheet, scriptTitle: string): string {
+  const meta = [c.dayOf, c.start ? `Início ${c.start}` : '', c.summary].filter(Boolean)
+  const head =
+    `<header class="cs-head"><p class="cs-film">${esc(scriptTitle || 'Sem título')}</p><h1>Ordem do dia · ${esc(c.day)}</h1>` +
+    `<p class="cs-meta">${meta.map((m) => `<span>${esc(m)}</span>`).join('')}</p>` +
+    (c.locations.length ? `<p class="cs-locs"><b>Locações:</b> ${esc(c.locations.join(' · '))}</p>` : '') +
+    (c.notes.trim() ? `<div class="cs-notes">${esc(c.notes)}</div>` : '') +
+    `</header>`
+  const scene = (s: CallSheetScene): string => {
+    const line = [`Cena ${s.number}${s.part ? ' (parte)' : ''}`, s.intExt, s.location, s.dn === 'N' ? 'Noite' : 'Dia', s.pages ? `${s.pages} pág.` : ''].filter(Boolean)
+    const shots = s.shots.length
+      ? `<ol class="cs-shots">${s.shots
+          .map((h) => `<li class="cs-shot"><span class="cs-t">${esc(h.time)}</span><span class="cs-code">${esc(h.code)}</span><span>${esc(h.text)}</span></li>`)
+          .join('')}</ol>`
+      : ''
+    return (
+      `<section class="cs-scene"><div class="cs-line"><span class="cs-time">${esc(s.time || '—')}</span><span class="cs-what">${line.map(esc).join(' · ')}</span></div>` +
+      (s.synopsis.trim() ? `<p class="cs-syn">${esc(s.synopsis)}</p>` : '') +
+      shots +
+      (s.cast.trim() ? `<p class="cs-row"><b>Elenco:</b> ${esc(s.cast)}</p>` : '') +
+      (s.elements.trim() ? `<p class="cs-row"><b>Elementos:</b> ${esc(s.elements)}</p>` : '') +
+      `</section>`
+    )
+  }
+  return head + (c.scenes.length ? c.scenes.map(scene).join('\n') : '<p class="empty">Nenhuma cena neste dia.</p>')
+}
+
+/** A cell with nothing to say: blank or the dash the reports write for "none". */
+const blank = (v: string | number): boolean => typeof v !== 'number' && (String(v).trim() === '' || String(v).trim() === '—')
+
+/** Leaves out the columns no row has anything in (keeping at least the first). */
+function withoutEmptyColumns(r: ReportPrint): ReportPrint {
+  const all = r.sections ? r.sections.flatMap((s) => s.rows) : r.rows
+  if (all.length === 0) return r
+  let keep = r.columns.map((_, i) => all.some((row) => !blank(row[i] ?? '')))
+  if (!keep.some(Boolean)) keep = r.columns.map((_, i) => i === 0)
+  if (keep.every(Boolean)) return r
+  const cut = (rows: (string | number)[][]): (string | number)[][] => rows.map((row) => row.filter((_, i) => keep[i]))
+  return {
+    ...r,
+    columns: r.columns.filter((_, i) => keep[i]),
+    rows: cut(r.rows),
+    ...(r.sections ? { sections: r.sections.map((s) => ({ ...s, rows: cut(s.rows) })) } : {})
+  }
 }
 
 export function buildReportHtml(input: ReportPrint): string {
-  const r = cleanReport(input)
+  const r = withoutEmptyColumns(cleanReport(input))
   const all = r.sections ? r.sections.flatMap((s) => s.rows) : r.rows
   // a column is numeric when every non-empty cell in it is
   const numeric = r.columns.map((_, i) => {
@@ -87,6 +210,8 @@ table { width: auto; min-width: 50%; max-width: 100%; border-collapse: collapse;
 thead { display: table-header-group }
 tr { break-inside: avoid }
 th, td { border-bottom: 0.5pt solid #999; padding: 3pt 5pt; text-align: left; vertical-align: top; overflow-wrap: break-word }
+/* a cell with several lines (one shot per line) keeps them */
+td { white-space: pre-line }
 /* column names are never cut in the middle of a word ("HORÁR / IO") */
 thead th { border-bottom: 1pt solid #111; font-size: 8pt; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap }
 /* room after a number, so it does not run into the text of the next column ("43 1", "10 DIA") */
@@ -98,13 +223,33 @@ tr.gh th { padding: 12pt 5pt 3pt; border-bottom: 1pt solid #111; font-size: 10.5
 tr.gh div { display: flex; justify-content: space-between; gap: 12pt }
 tr.gh .gs { font-size: 9pt; font-weight: 400; color: #333; white-space: nowrap }
 tr.gn td { font-style: italic; color: #333; border-bottom: 0.5pt dashed #999 }
+/* the day sheet */
+.cs-head { border-bottom: 1.5pt solid #111; padding-bottom: 6pt; margin-bottom: 4pt }
+.cs-film { margin: 0; font-size: 9pt; text-transform: uppercase; letter-spacing: .06em; color: #333 }
+.cs-head h1 { font-size: 16pt; margin: 2pt 0 4pt }
+.cs-meta { margin: 0; display: flex; flex-wrap: wrap; gap: 4pt 14pt; font-size: 10pt; font-weight: 600 }
+.cs-locs { margin: 4pt 0 0; font-size: 9.5pt }
+.cs-notes { margin-top: 6pt; padding: 5pt 7pt; border: 1pt solid #111; font-size: 9.5pt; white-space: pre-wrap }
+.cs-scene { break-inside: avoid; border-bottom: 0.5pt solid #999; padding: 6pt 0 7pt }
+.cs-line { display: flex; gap: 10pt; align-items: baseline; font-size: 10.5pt; font-weight: 700 }
+.cs-time { min-width: 34pt; font-variant-numeric: tabular-nums }
+.cs-syn, .cs-row, .cs-shots { margin: 3pt 0 0 44pt }
+.cs-syn { font-style: italic; color: #333 }
+.cs-shots { list-style: none; padding: 0 }
+.cs-shot { display: flex; gap: 8pt; padding: 1pt 0 }
+.cs-t { min-width: 30pt; font-variant-numeric: tabular-nums; color: #333 }
+.cs-code { min-width: 26pt; font-weight: 700; font-variant-numeric: tabular-nums }
 </style></head><body>
-<h1>${esc(r.title)}</h1>
+${
+  r.callsheet
+    ? callSheetHtml(r.callsheet, r.scriptTitle)
+    : `<h1>${esc(r.title)}</h1>
 <p class="sub">${esc(r.scriptTitle || 'Sem título')}</p>
 ${
   all.length === 0 && !r.sections?.length
     ? '<p class="empty">Sem dados neste relatório.</p>'
     : `<table><thead><tr>${head}</tr></thead>\n${body}\n</table>`
+}`
 }
 </body></html>`
 }

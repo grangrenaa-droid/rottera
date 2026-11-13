@@ -149,6 +149,64 @@ test.describe('F21 breakdown, shooting plan and scene links', () => {
     await expect(page.getByLabel('Notas de Dia 1')).toHaveValue('Chuva artificial às 18h')
   })
 
+  test('F21-H7 a scene takes its storyboard shots to its day, and one shot can go to another day', async ({ app, page, dialogs, userData }) => {
+    await open(page, dialogs)
+    for (const f of [
+      { caption: 'Marina de costas', scene: '1', shot: 'Plano médio' },
+      { caption: 'O café caindo', scene: '1', shot: 'Close' }
+    ]) expect((await rpc(userData, 'add_frame', f)).ok).toBe(true)
+    await menu(app, 'view-shooting')
+    await page.getByRole('button', { name: 'Plano de filmagem' }).click()
+    await page.getByRole('button', { name: 'Novo dia' }).click()
+    await page.getByRole('button', { name: 'Novo dia' }).click()
+    await page.getByLabel('Nome do dia 1').fill('Sábado')
+    await page.getByLabel('Nome do dia 2').fill('Domingo')
+    await page.getByLabel('Dia da cena 1', { exact: true }).selectOption({ label: 'Sábado' })
+    const sat = page.getByRole('region', { name: 'Sábado' })
+    const sun = page.getByRole('region', { name: 'Domingo' })
+    // the scene brings both its shots
+    await expect(sat.getByRole('list', { name: 'Planos da cena 1' }).locator('.shot-code')).toHaveText(['1.1', '1.2'])
+    await expect(sat.locator('.strip-shots')).toContainText('Close — O café caindo')
+
+    // the close-up goes to Sunday: the scene is on both days, each with its own shot
+    await sat.getByLabel('Dia do plano 1.2').selectOption({ label: 'Domingo' })
+    await expect(sat.getByRole('list', { name: 'Planos da cena 1' }).locator('.shot-code')).toHaveText(['1.1'])
+    await expect(sun.getByRole('list', { name: 'Planos da cena 1' }).locator('.shot-code')).toHaveText(['1.2'])
+    await expect(sat.locator('.strip-n')).toHaveText('1 parte')
+    await expect(sat.locator('.strip.part')).toHaveCount(1)
+    // each shot gets its own time on its day
+    await sun.getByLabel('Horário do plano 1.2').fill('09:30')
+    await sat.getByLabel('Horário do plano 1.1').fill('14:00')
+    await expect(sun.getByLabel('Horário do plano 1.2')).toHaveValue('09:30')
+    // shots are listed in the order they are filmed
+    await sun.getByLabel('Dia do plano 1.2').selectOption({ label: 'Sábado' })
+    await expect(sat.getByRole('list', { name: 'Planos da cena 1' }).locator('.shot-code')).toHaveText(['1.1', '1.2'])
+    await sat.getByLabel('Horário do plano 1.2').fill('09:00')
+    await expect(sat.getByRole('list', { name: 'Planos da cena 1' }).locator('.shot-code')).toHaveText(['1.2', '1.1'])
+    await sat.getByLabel('Dia do plano 1.2').selectOption({ label: 'Domingo' })
+    await sun.getByLabel('Horário do plano 1.2').fill('09:30')
+
+    // the plan in the reports says which shot is filmed on which day
+    await page.locator('.seg button', { hasText: /^Relatórios$/ }).click()
+    await page.locator('.reports nav button', { hasText: 'Plano de filmagem' }).click()
+    await expect(page.locator('.report-body thead')).toContainText('Planos')
+    await expect(page.locator('.report-body tbody tr', { hasText: 'Domingo' }).first()).toContainText('09:30 1.2 Close')
+    await expect(page.locator('.report-body tbody tr', { hasText: 'Sábado' }).first()).toContainText('14:00 1.1 Plano médio')
+
+    // the other shot follows: the scene is whole again, on Sunday
+    await menu(app, 'view-shooting')
+    await page.getByRole('button', { name: 'Plano de filmagem' }).click()
+    await sat.getByLabel('Dia do plano 1.1').selectOption({ label: 'Domingo' })
+    await expect(sat).toContainText('Nenhuma cena neste dia.')
+    await expect(sun.locator('.strip-n')).toHaveText('1')
+    // 1.2 keeps its 09:30 on Sunday; 1.1 left its time on Saturday, so it comes after
+    await expect(sun.getByRole('list', { name: 'Planos da cena 1' }).locator('.shot-code')).toHaveText(['1.2', '1.1'])
+
+    // a shot with no day waits with the scenes with no day
+    await sun.getByLabel('Dia do plano 1.2').selectOption({ label: 'Sem dia' })
+    await expect(page.locator('.plan-pool').getByRole('list', { name: 'Planos da cena 1' }).locator('.shot-code')).toHaveText(['1.2'])
+  })
+
   test('F21-H4 frames and light maps follow their scene when scenes move, and the navigator leads to them', async ({ app, page, dialogs, userData }) => {
     await open(page, dialogs)
     expect((await rpc(userData, 'add_frame', { caption: 'Plano geral da rua', scene: '2' })).ok).toBe(true)
@@ -225,6 +283,12 @@ test.describe('F21 breakdown, shooting plan and scene links', () => {
     await page.getByLabel('Horário da cena 1').fill('08:30')
     await page.getByLabel('Horário da cena 2').fill('19:00')
     await expect(page.getByLabel('Horário da cena 1')).toHaveValue('08:30')
+    // an earlier time puts the scene on top of the day; a later one, back below
+    const day1 = page.getByRole('region', { name: 'Dia 1' })
+    await page.getByLabel('Horário da cena 2').fill('07:00')
+    await expect(day1.locator('.strip-n')).toHaveText(['2', '1'])
+    await page.getByLabel('Horário da cena 2').fill('19:00')
+    await expect(day1.locator('.strip-n')).toHaveText(['1', '2'])
 
     // INT. day is no longer the colour of the page
     const colours = await page.evaluate(() => {

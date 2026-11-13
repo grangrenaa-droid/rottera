@@ -1,12 +1,12 @@
 import type { Block, Script } from './types'
-import type { ReportSection } from './reportHtml'
+import type { CallSheet, ReportSection } from './reportHtml'
 import { LABELS, KINDS } from './elements'
 import { paginate } from './paginate'
 import { parseHeading } from './smarttype'
 import { sceneNumbers } from './scenes'
 import { revisionLabel } from './revisions'
 import { electricLoad, gearList } from './lightmap'
-import { breakdownReport, elementsReport, emptyProduction, intExt, sceneInfo, scheduleReport } from './production'
+import { breakdownReport, elementsReport, emptyProduction, intExt, sceneInfo, sceneShots, scheduleReport } from './production'
 
 export interface Report {
   id: string
@@ -14,8 +14,8 @@ export interface Report {
   columns: string[]
   /** The flat table: what the screen and the CSV show. */
   rows: (string | number)[][]
-  /** How the PDF prints it when that differs: in groups with headings (a shooting plan, day by day). */
-  printed?: { columns: string[]; sections: ReportSection[] }
+  /** How the PDF prints it when that differs: in groups with headings (a shooting plan, day by day), or as a day sheet. */
+  printed?: { columns: string[]; sections: ReportSection[]; callsheet?: CallSheet }
 }
 
 /** What goes to the PDF: the groups when the report has them, the flat table otherwise. */
@@ -24,8 +24,11 @@ export function printable(r: Pick<Report, 'title' | 'columns' | 'rows' | 'printe
   columns: string[]
   rows: (string | number)[][]
   sections?: ReportSection[]
+  callsheet?: CallSheet
 } {
-  return r.printed ? { title: r.title, columns: r.printed.columns, rows: [], sections: r.printed.sections } : { title: r.title, columns: r.columns, rows: r.rows }
+  if (!r.printed) return { title: r.title, columns: r.columns, rows: r.rows }
+  const out = { title: r.title, columns: r.printed.columns, rows: [], sections: r.printed.sections }
+  return r.printed.callsheet ? { ...out, callsheet: r.printed.callsheet } : out
 }
 
 const words = (t: string): number => (t.trim() ? t.trim().split(/\s+/).length : 0)
@@ -269,7 +272,7 @@ export function buildReports(script: Script): Report[] {
       : []
   }
 
-  return [r1, r2, r3, r4, r5, r6, r7, r8, r1b, shots, equipment, breakdownReport(info, prod), elementsReport(info, prod), scheduleReport(info, prod)]
+  return [r1, r2, r3, r4, r5, r6, r7, r8, r1b, shots, equipment, breakdownReport(info, prod), elementsReport(info, prod), scheduleReport(info, prod, sceneShots(frames, info))]
 }
 
 export function reportToCsv(r: Report): string {
