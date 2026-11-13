@@ -185,6 +185,14 @@ test.describe('F28 the Luz window', () => {
     expect(c.sun).toMatch(/^nasce 06:4\d · golden hour \d\d:\d\d–\d\d:\d\d · se põe 17:\d\d$/)
   })
 
+  test('F28-L1 the short Som and Luz buttons on the toolbar are wide enough to hit', async ({ page, dialogs }) => {
+    await open(page, dialogs)
+    for (const name of ['Som', 'Luz']) {
+      const box = await page.locator('.toolbar').getByRole('button', { name, exact: true }).boundingBox()
+      expect(box?.width ?? 0, name).toBeGreaterThanOrEqual(64)
+    }
+  })
+
   test('F28-A1 the four tabs of the Luz window have no serious accessibility violations, light and dark', async ({ app, page, dialogs, userData }) => {
     await open(page, dialogs)
     expect((await rpc(userData, 'create_lightmap', { name: 'Cozinha', scene: '1', width: 6, height: 4 })).ok).toBe(true)

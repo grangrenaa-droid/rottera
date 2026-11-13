@@ -13,7 +13,7 @@
 .seg { max-width: 100%; flex-wrap: wrap; display: inline-flex; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
 .seg .btn { border-radius: 0; }
 /* the toolbar holds six views and must stay on one row at 1120 px (F11-L6): its tabs and menus are a bit tighter */
-.toolbar .seg .btn { padding: 0 9px; }
+.toolbar .seg .btn { padding: 0 9px; min-width: 64px; } /* short names (Som, Luz) still get a button easy to hit */
 .toolbar .popover > .btn { padding: 0 10px; }
 /* with Som there are seven views: in narrow windows they get tighter still */
 @media (max-width: 1365px) {
