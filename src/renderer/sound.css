@@ -1,0 +1,45 @@
+/* The Som window: tabs, then the sound plan (list, drawing, selected microphone). */
+.snd { display: grid; gap: 16px; max-width: 1500px; margin: 0 auto; }
+.snd-head { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+
+.snd-plan { display: grid; grid-template-columns: 240px minmax(0, 1fr) 280px; gap: 16px; align-items: start; }
+.snd-plans, .snd-panel {
+  background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  padding: 12px; display: grid; gap: 6px; max-height: calc(100vh - 200px); overflow: auto;
+}
+.snd-plans h3, .snd-panel h3 { margin: 8px 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--color-text-muted); }
+.snd-plans ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.snd-plans button {
+  width: 100%; text-align: left; padding: 6px 8px; border: 1px solid transparent; border-radius: var(--radius-sm);
+  background: transparent; cursor: pointer; color: inherit; display: grid; gap: 2px;
+}
+.snd-plans button:hover { background: color-mix(in srgb, var(--color-accent) 8%, transparent); }
+.snd-plans button.on { background: color-mix(in srgb, #7c3aed 14%, transparent); border-color: #7c3aed; }
+.snd-plans .muted { font-size: 12px; }
+
+.snd-main { display: grid; gap: 10px; min-width: 0; }
+.snd-palette { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.snd-group { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.snd-group-name { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--color-text-muted); margin-right: 4px; }
+.snd-history { margin-left: auto; display: flex; gap: 4px; }
+.snd-surface { margin: 0 auto; width: 100%; outline: none; touch-action: none; background: #fff; box-shadow: var(--shadow-page); }
+.snd-surface:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 2px; }
+.snd-surface svg { display: block; width: 100%; height: auto; user-select: none; }
+.snd-surface [data-mic] { cursor: grab; }
+.snd-surface [data-mic-rotate] { cursor: crosshair; }
+.snd-scale { font-size: 12px; margin: 0; }
+.snd-note { margin: 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.snd-create { max-width: 560px; display: grid; gap: 12px; }
+.snd-create .row { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }
+.snd-create label { display: grid; gap: 4px; font-size: 12px; font-weight: 600; }
+.snd-create input { width: 96px; }
+
+.snd-panel label.stack { font-weight: 600; font-size: 12px; margin-top: 4px; }
+.snd-panel label.check { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+.snd-panel input:not([type="checkbox"]), .snd-panel select, .snd-panel textarea { width: 100%; }
+.snd-said { font-size: 12px; margin: 0; color: var(--color-text-muted); }
+
+@media (max-width: 1200px) {
+  .snd-plan { grid-template-columns: 200px minmax(0, 1fr); }
+  .snd-panel { grid-column: 1 / -1; max-height: none; }
+}

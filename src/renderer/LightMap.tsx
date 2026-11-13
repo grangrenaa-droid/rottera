@@ -206,7 +206,7 @@ function optNumber(v: string, lo: number, hi: number): number | undefined {
  * What is typed stays as typed; a value inside the limits is used as soon as it is typed; leaving the field or
  * Enter settles it inside the limits (or, when optional, empty). The field's arrows apply at once.
  */
-function NumberField(
+export function NumberField(
   props: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'min' | 'max' | 'type'> & {
     value: number | undefined
     min: number

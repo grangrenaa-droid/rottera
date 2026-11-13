@@ -58,6 +58,7 @@ export type MenuAction =
   | 'view-board'
   | 'view-storyboard'
   | 'view-lightmap'
+  | 'view-sound'
   | 'export-lightmap'
   | 'export-characters'
   | 'export-storyboard'

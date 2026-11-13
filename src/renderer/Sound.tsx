@@ -1,0 +1,43 @@
+import { useState } from 'react'
+import type { LightMap, Sound } from '../shared/types'
+import type { SceneInfo } from '../shared/production'
+import type { Report } from '../shared/reports'
+import { SoundPlanView } from './SoundPlan'
+
+interface Props {
+  sound: Sound
+  maps: LightMap[]
+  scenes: SceneInfo[]
+  /** The scene's id, given to its heading first if it has none. */
+  sceneId(s: SceneInfo): string | null
+  onChange(s: Sound): void
+  onExportPlans(): void
+  onExportPdf(r: Report, landscape: boolean): void
+  onExportCsv(name: string, csv: string): void
+}
+
+type Tab = 'plan' | 'sheets' | 'library' | 'equipment'
+
+/** The sound department's window: the microphones on the set, a sheet per scene, ambiences and music, equipment. */
+export function SoundView(p: Props): JSX.Element {
+  const [tab, setTab] = useState<Tab>('plan')
+  const tabBtn = (t: Tab, label: string): JSX.Element => (
+    <button className="btn ghost" aria-pressed={tab === t} onClick={() => setTab(t)}>
+      {label}
+    </button>
+  )
+  return (
+    <div className="snd">
+      <div className="snd-head">
+        <div className="seg snd-tabs" role="group" aria-label="Som">
+          {tabBtn('plan', 'Planta')}
+          {tabBtn('sheets', 'Ficha por cena')}
+          {tabBtn('library', 'Ambientes e músicas')}
+          {tabBtn('equipment', 'Equipamento')}
+        </div>
+      </div>
+      {tab === 'plan' && <SoundPlanView sound={p.sound} maps={p.maps} scenes={p.scenes} sceneId={p.sceneId} onChange={p.onChange} />}
+      {tab !== 'plan' && <p className="muted">Em breve.</p>}
+    </div>
+  )
+}

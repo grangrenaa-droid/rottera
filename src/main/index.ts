@@ -630,6 +630,7 @@ function buildMenu(): void {
         item('Beat Board', 'view-board', 'CmdOrCtrl+Alt+2'),
         item('Storyboard', 'view-storyboard', 'CmdOrCtrl+Alt+4'),
         item('Mapa de Luz', 'view-lightmap', 'CmdOrCtrl+Alt+5'),
+        item('Som', 'view-sound', 'CmdOrCtrl+Alt+7'),
         item('Filmagem (decupagem e plano)', 'view-shooting', 'CmdOrCtrl+Alt+6'),
         item('Relatórios', 'view-reports', 'CmdOrCtrl+Alt+3'),
         { type: 'separator' },

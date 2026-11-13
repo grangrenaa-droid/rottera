@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { Beat, Block, Board, CharacterSheet, Extras, Kind, LightMap, Note, Paper, Production, RevisionState, Script, Storyboard, TableRead, TitlePage, Watermark } from '../shared/types'
+import type { Beat, Block, Board, CharacterSheet, Extras, Kind, LightMap, Note, Paper, Production, RevisionState, Script, Sound, Storyboard, TableRead, TitlePage, Watermark } from '../shared/types'
 import { emptyScript, emptyStoryboard } from '../shared/types'
 import { LABELS } from '../shared/elements'
 import { LONG_SCRIPT_BLOCKS, LONG_SCRIPT_DELAY, paginate, type PageLine } from '../shared/paginate'
@@ -31,12 +31,14 @@ import { BoardView } from './Board'
 import { StoryboardView } from './Storyboard'
 import { ScriptPage } from './ScriptPage'
 import { LightMapView } from './LightMap'
+import { SoundView } from './Sound'
+import { emptySound, reconcileSound } from '../shared/sound'
 import { ReportsView } from './Reports'
 import { ConnectDialog, CopyFolderDialog, DiagnosticsDialog, ExportDialog, ManualDialog, SmartTypeDialog, TemplatesDialog, TitleDialog, VersionsDialog, WatermarkDialog } from './Dialogs'
 import { createBridgeHandler } from './bridgeHandler'
 
 type Saved = 'saved' | 'draft' | 'saving' | 'unsaved' | 'error'
-type Panel = 'script' | 'board' | 'storyboard' | 'lightmap' | 'reports' | 'shooting'
+type Panel = 'script' | 'board' | 'storyboard' | 'lightmap' | 'sound' | 'reports' | 'shooting'
 type DialogName = null | 'title' | 'templates' | 'smarttype' | 'connect' | 'versions' | 'manual' | 'diagnostics' | 'watermark' | 'copyfolder' | 'export'
 
 const SAVE_LABEL: Record<Saved, string> = {
@@ -322,6 +324,7 @@ export function App(): JSX.Element {
   const [board, setBoardState] = useState<Board>({ lanes: [], beats: [] })
   const [storyboard, setStoryboardState] = useState<Storyboard>(emptyStoryboard())
   const [lightMaps, setLightMapsState] = useState<LightMap[]>([])
+  const [sound, setSoundState] = useState<Sound | undefined>(undefined)
   const [paper, setPaperState] = useState<Paper>('letter')
   const [characters, setCharactersState] = useState<CharacterSheet[]>([])
   const [extras, setExtras] = useState<Extras | undefined>(undefined)
@@ -403,7 +406,7 @@ export function App(): JSX.Element {
   const timer = useRef<number | null>(null)
   const claudeTimer = useRef<number | null>(null)
 
-  scriptRef.current = { titlePage, blocks, board, storyboard, lightMaps, paper, characters, extras, revision, scenesLocked, numberScenes, watermark, notes, production, tableRead }
+  scriptRef.current = { titlePage, blocks, board, storyboard, lightMaps, paper, characters, extras, revision, scenesLocked, numberScenes, watermark, notes, production, tableRead, sound }
   pathRef.current = path
 
   // ------------------------------------------------------------ theme
@@ -584,6 +587,21 @@ export function App(): JSX.Element {
     [putLightMaps]
   )
 
+  const putSound = useCallback(
+    (s: Sound) => {
+      scriptRef.current = { ...scriptRef.current, sound: s }
+      setSoundState(s)
+      scheduleAutosave()
+    },
+    [scheduleAutosave]
+  )
+  // a light map resized, renumbered or deleted carries its sound plan along (the sound plan never changes the light map)
+  useEffect(() => {
+    if (!sound) return
+    const next = reconcileSound(sound, lightMaps)
+    if (next !== sound) putSound(next)
+  }, [lightMaps, sound, putSound])
+
   const setTableRead = useCallback(
     (t: TableRead) => {
       scriptRef.current = { ...scriptRef.current, tableRead: t }
@@ -637,6 +655,7 @@ export function App(): JSX.Element {
     setBoardState(s.board ?? { lanes: [], beats: [] })
     setStoryboardState(s.storyboard ?? emptyStoryboard())
     setLightMapsState(s.lightMaps ?? [])
+    setSoundState(s.sound ? reconcileSound(s.sound, s.lightMaps ?? []) : undefined)
     setCharactersState(s.characters ?? [])
     // files made before the paper option are letter; new scripts follow the system language (A4 for Brazil)
     setPaperState(s.paper ?? (p === null && isBrazilian() ? 'a4' : 'letter'))
@@ -1079,6 +1098,7 @@ export function App(): JSX.Element {
         case 'view-board': return setPanel('board')
         case 'view-storyboard': return setPanel('storyboard')
         case 'view-lightmap': return setPanel('lightmap')
+        case 'view-sound': return setPanel('sound')
         case 'export-lightmap': return void doExport('lightmap-pdf')
         case 'export-characters': return void doExport('characters-pdf')
         case 'export-storyboard': return void doExport('storyboard-pdf')
@@ -1221,7 +1241,7 @@ export function App(): JSX.Element {
   }, [panel])
 
   const shootingScenes = useMemo(
-    () => (panel === 'shooting' ? sceneInfo({ blocks, paper, scenesLocked }, pagination) : []),
+    () => (panel === 'shooting' || panel === 'sound' ? sceneInfo({ blocks, paper, scenesLocked }, pagination) : []),
     [panel, blocks, paper, scenesLocked, pagination]
   )
   const sceneIdsOf = useCallback((list: { id: string | null; index: number }[]) => {
@@ -1408,6 +1428,7 @@ export function App(): JSX.Element {
             <button className="btn ghost" aria-pressed={panel === 'board'} onClick={() => setPanel('board')}>Beat Board</button>
             <button className="btn ghost" aria-pressed={panel === 'storyboard'} onClick={() => setPanel('storyboard')}>Storyboard</button>
             <button className="btn ghost" aria-pressed={panel === 'lightmap'} onClick={() => setPanel('lightmap')}>Mapa de Luz</button>
+            <button className="btn ghost" aria-pressed={panel === 'sound'} onClick={() => setPanel('sound')}>Som</button>
             <button className="btn ghost" aria-pressed={panel === 'shooting'} onClick={() => setPanel('shooting')}>Filmagem</button>
             <button className="btn ghost" aria-pressed={panel === 'reports'} onClick={() => setPanel('reports')}>Relatórios</button>
           </div>
@@ -1638,6 +1659,18 @@ export function App(): JSX.Element {
               onChange={setLightMaps}
               onExport={() => void doExport('lightmap-pdf')}
               focusMap={jump.map}
+            />
+          )}
+          {panel === 'sound' && (
+            <SoundView
+              sound={sound ?? emptySound()}
+              maps={lightMaps}
+              scenes={shootingScenes}
+              sceneId={sceneIdOf}
+              onChange={putSound}
+              onExportPlans={() => undefined}
+              onExportPdf={exportReportPdf}
+              onExportCsv={exportCsv}
             />
           )}
           {panel === 'shooting' && (

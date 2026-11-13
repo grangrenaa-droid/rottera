@@ -15,6 +15,11 @@
 /* the toolbar holds six views and must stay on one row at 1120 px (F11-L6): its tabs and menus are a bit tighter */
 .toolbar .seg .btn { padding: 0 9px; }
 .toolbar .popover > .btn { padding: 0 10px; }
+/* with Som there are seven views: in narrow windows they get tighter still */
+@media (max-width: 1200px) {
+  .toolbar .seg .btn { padding: 0 6px; }
+  .toolbar .popover > .btn { padding: 0 7px; }
+}
 .btn.small { height: 28px; padding: 0 10px; font-size: 12px; }
 .icon {
   width: 28px; height: 28px; border-radius: var(--radius-sm); border: 1px solid transparent;
