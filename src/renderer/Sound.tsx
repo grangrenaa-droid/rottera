@@ -3,6 +3,7 @@ import type { LightMap, Sound } from '../shared/types'
 import type { SceneInfo } from '../shared/production'
 import type { Report } from '../shared/reports'
 import { SoundPlanView } from './SoundPlan'
+import { SoundSheetView } from './SoundSheet'
 
 interface Props {
   sound: Sound
@@ -37,7 +38,10 @@ export function SoundView(p: Props): JSX.Element {
         </div>
       </div>
       {tab === 'plan' && <SoundPlanView sound={p.sound} maps={p.maps} scenes={p.scenes} sceneId={p.sceneId} onChange={p.onChange} />}
-      {tab !== 'plan' && <p className="muted">Em breve.</p>}
+      {tab === 'sheets' && (
+        <SoundSheetView sound={p.sound} maps={p.maps} scenes={p.scenes} sceneId={p.sceneId} onChange={p.onChange} onExportPdf={p.onExportPdf} />
+      )}
+      {(tab === 'library' || tab === 'equipment') && <p className="muted">Em breve.</p>}
     </div>
   )
 }

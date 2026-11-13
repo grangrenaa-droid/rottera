@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { cleanSound, emptySheet, emptySound, micsOfScene, newMic, plansOfScene, reconcileSound } from '../src/shared/sound'
+import { cleanSound, emptySheet, emptySound, micsOfScene, newMic, plansOfScene, reconcileSound, sheetsReport } from '../src/shared/sound'
+import type { SceneInfo } from '../src/shared/production'
 import { parseScriptFile, serialize } from '../src/shared/scriptfile'
 import type { LightMap, Script, Sound } from '../src/shared/types'
 
@@ -96,5 +97,37 @@ describe('sound plans follow the light maps without changing them', () => {
     ])
     // the actor was deleted in the light map: the lavalier names no one
     expect(micsOfScene(sound(), [map({ items: [] })], 's1')[1].actor).toBe('')
+  })
+})
+
+describe('the sound sheets as a report', () => {
+  const scene = (over: Partial<SceneInfo>): SceneInfo => ({
+    n: 0, index: 0, end: 1, id: 's1', number: '1', heading: 'INT. COZINHA - DIA', intExt: 'INT.', location: 'COZINHA', time: 'DIA',
+    night: false, eighths: 8, page: 1, cast: [], synopsis: '', ...over
+  })
+
+  it('prints one sheet per scene that has one, with only the lines that were filled', () => {
+    const s = emptySound()
+    s.sheets.s1 = { ...emptySheet(), capture: 'direct', risks: ['Trânsito'], roomTone: true, roomToneSeconds: 30 }
+    const r = sheetsReport([scene({}), scene({ n: 1, id: 's2', number: '2', heading: 'EXT. RUA - NOITE' })], s, [])
+    expect(r.title).toBe('Fichas de som')
+    expect(r.printed?.columns).toEqual(['Item', 'Anotação'])
+    expect(r.printed?.sections).toHaveLength(1)
+    expect(r.printed?.sections[0].title).toBe('Cena 1 · INT. COZINHA - DIA')
+    expect(r.printed?.sections[0].rows).toEqual([
+      ['Captação', 'Som direto'],
+      ['Riscos', 'Trânsito'],
+      ['Room tone', '30 s']
+    ])
+  })
+
+  it('who speaks shows how each is miked, and the microphones of the scene come from the plan', () => {
+    const s = sound()
+    s.sheets.s1 = { ...emptySheet(), voices: { MARINA: 'lapela', DAVI: 'vara' } }
+    const r = sheetsReport([scene({ cast: ['MARINA', 'DAVI'] })], s, [map()])
+    const rows = r.printed?.sections[0].rows ?? []
+    expect(rows[0]).toEqual(['Quem fala', 'MARINA: lapela\nDAVI: vara'])
+    expect(rows[1][0]).toBe('Microfones')
+    expect(rows[1][1]).toContain('Lapela 2 presa em Luísa')
   })
 })

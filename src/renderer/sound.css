@@ -39,6 +39,24 @@
 .snd-panel input:not([type="checkbox"]), .snd-panel select, .snd-panel textarea { width: 100%; }
 .snd-said { font-size: 12px; margin: 0; color: var(--color-text-muted); }
 
+/* the sheet per scene: the scene list (as in the breakdown) and the sheet */
+.snd-sheets { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 24px; align-items: start; }
+.snd-sheets .prod-scenes small { grid-column: 2; color: #7c3aed; font-size: 12px; }
+.snd-sheet { display: grid; gap: 12px; max-width: 760px; }
+.snd-sheet-head { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.snd-sheet-head h2 { margin: 0; font-size: 18px; }
+.snd-sheet fieldset { border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 8px 12px 12px; margin: 0; display: grid; gap: 6px; }
+.snd-sheet legend { font-weight: 700; padding: 0 4px; }
+.snd-sheet label.stack { font-weight: 600; font-size: 12px; }
+.snd-sheet label.check { display: inline-flex; gap: 6px; align-items: center; }
+.snd-sheet textarea, .snd-sheet input:not([type="checkbox"]):not([type="radio"]):not([type="number"]) { width: 100%; }
+.snd-sheet .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.snd-sheet input[type="number"] { width: 90px; }
+.snd-choices { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.snd-voices { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.snd-voices li { display: grid; grid-template-columns: minmax(120px, 220px) 160px; gap: 12px; align-items: center; }
+.snd-scene-mics ul { margin: 4px 0 0; padding-left: 18px; font-size: 13px; }
+
 @media (max-width: 1200px) {
   .snd-plan { grid-template-columns: 200px minmax(0, 1fr); }
   .snd-panel { grid-column: 1 / -1; max-height: none; }

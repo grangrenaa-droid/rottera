@@ -81,4 +81,34 @@ test.describe('F27 the Som window', () => {
     expect(after.sound.plans[0].mics.map((m: { type: string }) => m.type)).toEqual(['shotgun', 'lavalier'])
     expect(after.sound.plans[0].mics[0].channel).toBe(1)
   })
+
+  test('F27-H2 the sound sheet belongs to the scene and follows it when the scene moves', async ({ app, page, dialogs }) => {
+    await open(page, dialogs)
+    const sheets = async (): Promise<void> => {
+      await menu(app, 'view-sound')
+      await page.getByRole('group', { name: 'Som' }).getByRole('button', { name: 'Ficha por cena' }).click()
+    }
+    const list = page.getByRole('navigation', { name: 'Cenas da ficha de som' })
+    await sheets()
+    await list.getByRole('button', { name: /COZINHA/ }).click()
+    await page.getByRole('radio', { name: 'Som direto' }).check()
+    await page.getByRole('checkbox', { name: 'Trânsito' }).check()
+    await page.getByLabel('Microfone de MARINA').selectOption('lapela')
+    await expect(list.getByRole('button', { name: /COZINHA/ })).toContainText('ficha')
+    await expect(list.getByRole('button', { name: /RUA/ })).not.toContainText('ficha')
+
+    await menu(app, 'view-script')
+    const nav = page.getByRole('complementary', { name: 'Navegador de cenas' })
+    await nav.getByRole('button', { name: 'Descer cena 1' }).click()
+    await expect(nav.locator('.scene-text').first()).toHaveText('EXT. RUA - NOITE')
+
+    await sheets()
+    await list.getByRole('button', { name: /COZINHA/ }).click()
+    await expect(page.getByRole('heading', { name: /COZINHA/ })).toBeVisible()
+    await expect(page.getByRole('radio', { name: 'Som direto' })).toBeChecked()
+    await expect(page.getByRole('checkbox', { name: 'Trânsito' })).toBeChecked()
+    await expect(page.getByLabel('Microfone de MARINA')).toHaveValue('lapela')
+    await list.getByRole('button', { name: /RUA/ }).click()
+    await expect(page.getByRole('radio', { name: 'Som direto' })).not.toBeChecked()
+  })
 })

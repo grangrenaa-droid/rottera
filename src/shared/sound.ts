@@ -1,4 +1,7 @@
 import type { Ambience, Capture, EquipItem, EquipState, LightMap, Mic, MicType, Song, Sound, SoundPlan, SoundSheet } from './types'
+import type { SceneInfo } from './production'
+import type { Report } from './reports'
+import type { ReportSection } from './reportHtml'
 import { newId } from './structures'
 
 /** The microphone types, as the palette and the sheets name them, with the reach each starts with. */
@@ -207,4 +210,52 @@ export function micsOfScene(sound: Sound, maps: LightMap[], sceneId: string): { 
       return { mic, actor: a ? a.label : '' }
     })
   })
+}
+
+const VOICE_LABEL: Record<'lapela' | 'vara' | 'ambos', string> = { lapela: 'lapela', vara: 'vara', ambos: 'lapela e vara' }
+
+/** A microphone as one line of a sheet: "Lapela 2 presa em Luísa (canal 2)", "Mic 1 (Shotgun · MKH 416, canal 1)". */
+export function micLine(mic: Mic, actor: string): string {
+  const type = MIC_DEFS[mic.type].label
+  const name = mic.label.trim() || type
+  const named = name.toLowerCase().startsWith(type.toLowerCase())
+  const bits = [named ? '' : type, mic.model?.trim() ?? ''].filter(Boolean).join(' · ')
+  const more = [bits, mic.channel ? `canal ${mic.channel}` : '', mic.wireless ? 'sem fio' : ''].filter(Boolean).join(', ')
+  return `${name}${mic.type === 'lavalier' && actor ? ` presa em ${actor}` : ''}${more ? ` (${more})` : ''}`
+}
+
+/**
+ * The lines of a scene's sheet, in the sheet's order, without the empty ones. Who speaks follows the scene's cast as
+ * the script has it now: someone who no longer speaks in the scene is not printed.
+ */
+export function sheetRows(sheet: SoundSheet | undefined, mics: { mic: Mic; actor: string }[], cast: string[]): [string, string][] {
+  const s = sheet ?? emptySheet()
+  const rows: [string, string][] = []
+  const add = (k: string, v: string): void => {
+    if (v.trim()) rows.push([k, v.trim()])
+  }
+  add('Captação', CAPTURES.find((c) => c.id === s.capture)?.label ?? '')
+  add('Quem fala', cast.filter((who) => s.voices[who]).map((who) => `${who}: ${VOICE_LABEL[s.voices[who]]}`).join('\n'))
+  add('Microfones', mics.map((m) => micLine(m.mic, m.actor)).join('\n'))
+  add('Riscos', [...s.risks, s.otherRisk.trim()].filter(Boolean).join(', '))
+  add('O que pedir no set', s.requests)
+  add('Room tone', s.roomTone ? `${s.roomToneSeconds} s` : '')
+  add('Efeitos', s.effects)
+  add('Playback', s.playback)
+  add('Observações', s.notes)
+  return rows
+}
+
+/** "Exportar fichas (PDF)": a sheet for each scene with something on it, the scene's microphones included. */
+export function sheetsReport(scenes: SceneInfo[], sound: Sound, maps: LightMap[]): Report {
+  const sections: ReportSection[] = []
+  const flat: string[][] = []
+  for (const sc of scenes) {
+    if (!sc.id) continue
+    const rows = sheetRows(sound.sheets[sc.id], micsOfScene(sound, maps, sc.id), sc.cast)
+    if (!rows.length) continue
+    sections.push({ title: `Cena ${sc.number} · ${sc.heading}`, rows })
+    for (const [k, v] of rows) flat.push([sc.number, k, v])
+  }
+  return { id: 'fichas-som', title: 'Fichas de som', columns: ['Cena', 'Item', 'Anotação'], rows: flat, printed: { columns: ['Item', 'Anotação'], sections } }
 }
