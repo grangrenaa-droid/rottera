@@ -5,6 +5,8 @@ import type { Report } from '../shared/reports'
 import { SoundPlanView } from './SoundPlan'
 import { SoundSheetView } from './SoundSheet'
 import { AmbiencesView } from './Ambiences'
+import { EquipmentView } from './Equipment'
+import { soundAutoLines } from '../shared/equipment'
 
 interface Props {
   sound: Sound
@@ -50,7 +52,18 @@ export function SoundView(p: Props): JSX.Element {
       {tab === 'library' && (
         <AmbiencesView sound={p.sound} scenes={p.scenes} sceneId={p.sceneId} onChange={p.onChange} onExportPdf={p.onExportPdf} onExportCsv={p.onExportCsv} />
       )}
-      {tab === 'equipment' && <p className="muted">Em breve.</p>}
+      {tab === 'equipment' && (
+        <EquipmentView
+          title="Equipamento de som"
+          reportId="equipamento-som"
+          auto={soundAutoLines(p.sound)}
+          items={p.sound.equipment}
+          state={p.sound.equipState}
+          onChange={(equipment, equipState) => p.onChange({ ...p.sound, equipment, equipState })}
+          onExportPdf={(r) => p.onExportPdf(r, false)}
+          onExportCsv={p.onExportCsv}
+        />
+      )}
     </div>
   )
 }

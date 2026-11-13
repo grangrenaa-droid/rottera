@@ -16,7 +16,7 @@
 .toolbar .seg .btn { padding: 0 9px; }
 .toolbar .popover > .btn { padding: 0 10px; }
 /* with Som there are seven views: in narrow windows they get tighter still */
-@media (max-width: 1200px) {
+@media (max-width: 1365px) {
   .toolbar .seg .btn { padding: 0 6px; }
   .toolbar .popover > .btn { padding: 0 7px; }
 }

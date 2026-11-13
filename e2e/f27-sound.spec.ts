@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ElectronApplication, Page } from '@playwright/test'
-import { bridgeInfo, expect, menu, test, type Dialogs } from './fixtures'
+import { axeViolations, bridgeInfo, expect, menu, setTheme, test, type Dialogs } from './fixtures'
 
 test.afterEach(({ errors }) => {
   expect(errors, 'console or page errors').toEqual([])
@@ -110,5 +110,105 @@ test.describe('F27 the Som window', () => {
     await expect(page.getByLabel('Microfone de MARINA')).toHaveValue('lapela')
     await list.getByRole('button', { name: /RUA/ }).click()
     await expect(page.getByRole('radio', { name: 'Som direto' })).not.toBeChecked()
+  })
+
+  test('F27-H3 the sound equipment lists the microphones of the plans, takes items by hand and exports a CSV', async ({ app, page, dialogs, userData }) => {
+    const dir = await open(page, dialogs)
+    expect((await rpc(userData, 'create_lightmap', { name: 'Cozinha', scene: '1', width: 6, height: 4 })).ok).toBe(true)
+    await menu(app, 'view-sound')
+    await page.locator('.snd-plans button', { hasText: 'Cozinha' }).click()
+    await page.getByRole('button', { name: 'Pôr Shotgun' }).click()
+    await page.getByLabel('Modelo').fill('MKH 416')
+
+    await page.getByRole('group', { name: 'Som' }).getByRole('button', { name: 'Equipamento' }).click()
+    const row = page.locator('tr', { hasText: 'Shotgun · MKH 416' })
+    await expect(row).toContainText('da planta')
+    await expect(row.locator('.eq-qty')).toHaveText('1')
+    await page.getByLabel('Shotgun · MKH 416 retirado').check()
+    await page.getByRole('button', { name: '+ Item' }).click()
+    await page.getByLabel('Nome do item 1').fill('Fone')
+
+    const csv = join(dir, 'equipamento.csv')
+    await dialogs.save(csv)
+    await page.getByRole('button', { name: 'Exportar CSV' }).click()
+    await expect.poll(() => { try { return readFileSync(csv, 'utf8') } catch { return '' } }).toContain('Fone')
+    const text = readFileSync(csv, 'utf8')
+    expect(text).toContain('Shotgun · MKH 416;1;—;Sim;Não;—')
+    expect(text).toContain('Fone;1;—;Não;Não;—')
+  })
+
+  test('F27-H4 the day sheet carries the sound line of its scene', async ({ app, page, dialogs, userData }) => {
+    await open(page, dialogs)
+    expect((await rpc(userData, 'create_lightmap', { name: 'Cozinha', scene: '1', width: 6, height: 4 })).ok).toBe(true)
+    await menu(app, 'view-sound')
+    await page.locator('.snd-plans button', { hasText: 'Cozinha' }).click()
+    await page.getByRole('button', { name: 'Pôr Shotgun' }).click()
+    await page.getByLabel('Escrever o microfone').fill('canal 1')
+    await page.getByLabel('Escrever o microfone').press('Enter')
+    await expect(page.getByLabel('Canal', { exact: true })).toHaveValue('1')
+    await page.getByRole('group', { name: 'Som' }).getByRole('button', { name: 'Ficha por cena' }).click()
+    await page.getByRole('navigation', { name: 'Cenas da ficha de som' }).getByRole('button', { name: /COZINHA/ }).click()
+    await page.getByRole('radio', { name: 'Som direto' }).check()
+
+    // what the day sheet sends to the printer is kept instead of opening a save dialog
+    await app.evaluate(({ ipcMain }) => {
+      ipcMain.removeHandler('file:exportReportPdf')
+      ipcMain.handle('file:exportReportPdf', (_e, req) => {
+        ;(globalThis as unknown as { lastReport: unknown }).lastReport = req
+        return null
+      })
+    })
+    await menu(app, 'view-shooting')
+    await page.getByRole('button', { name: 'Plano de filmagem' }).click()
+    await page.getByRole('button', { name: 'Novo dia' }).click()
+    await page.getByLabel('Dia da cena 1', { exact: true }).selectOption({ label: 'Dia 1' })
+    await page.getByRole('button', { name: 'Ordem do dia (PDF)' }).click()
+    const sent = async (): Promise<any> => app.evaluate(() => (globalThis as unknown as { lastReport?: unknown }).lastReport ?? null)
+    await expect.poll(sent).not.toBeNull()
+    const req = await sent()
+    expect(req.callsheet.scenes[0].sound).toBe('Som direto · Mic 1 (Shotgun, canal 1)')
+  })
+
+  test('F27-E1 deleting the light map keeps the sound plan and its microphones', async ({ app, page, dialogs, userData }) => {
+    await open(page, dialogs)
+    expect((await rpc(userData, 'create_lightmap', { name: 'Cozinha', scene: '1', width: 6, height: 4 })).ok).toBe(true)
+    await menu(app, 'view-sound')
+    await page.locator('.snd-plans button', { hasText: 'Cozinha' }).click()
+    await page.getByRole('button', { name: 'Pôr Shotgun' }).click()
+    await page.getByRole('button', { name: 'Pôr Omnidirecional' }).click()
+
+    await menu(app, 'view-lightmap')
+    await page.locator('.lm-side').getByRole('button', { name: 'Apagar', exact: true }).click()
+    await menu(app, 'view-sound')
+    const loose = page.locator('.snd-plans button', { hasText: 'COZINHA' })
+    await expect(loose).toContainText('planta de som')
+    await loose.click()
+    await expect(page.locator('.snd-surface [data-mic]')).toHaveCount(2)
+    // with no light map, nothing faint below
+    await expect(page.locator('.snd-surface svg g[opacity="0.35"]')).toHaveCount(0)
+  })
+
+  test('F27-A1 the four tabs of the Som window have no serious accessibility violations, light and dark', async ({ app, page, dialogs, userData }) => {
+    await open(page, dialogs)
+    expect((await rpc(userData, 'create_lightmap', { name: 'Cozinha', scene: '1', width: 6, height: 4 })).ok).toBe(true)
+    await menu(app, 'view-sound')
+    await page.locator('.snd-plans button', { hasText: 'Cozinha' }).click()
+    await page.getByRole('button', { name: 'Pôr Lapela' }).click()
+    const tabs = page.getByRole('group', { name: 'Som' })
+    await tabs.getByRole('button', { name: 'Ambientes e músicas' }).click()
+    await page.getByRole('button', { name: '+ Ambiente em COZINHA' }).click()
+    await page.getByRole('button', { name: '+ Música' }).click()
+    await tabs.getByRole('button', { name: 'Equipamento' }).click()
+    await page.getByRole('button', { name: '+ Item' }).click()
+    const found: string[] = []
+    for (const theme of ['light', 'night'] as const) {
+      await setTheme(app, page, theme)
+      for (const [tab, label] of [['Planta', 'planta'], ['Ficha por cena', 'ficha'], ['Ambientes e músicas', 'ambientes'], ['Equipamento', 'equipamento']]) {
+        await tabs.getByRole('button', { name: tab }).click()
+        if (tab === 'Planta') await page.locator('.snd-plans button', { hasText: 'Cozinha' }).click()
+        for (const v of await axeViolations(page)) found.push(`${theme}/${label}: ${v}`)
+      }
+    }
+    expect(found).toEqual([])
   })
 })

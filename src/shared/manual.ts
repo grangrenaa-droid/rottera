@@ -196,6 +196,16 @@ export const MANUAL: ManualTopic[] = [
     ]
   },
   {
+    id: 'som',
+    title: 'Som: microfones, fichas e músicas',
+    group: 'Produção',
+    keywords: ['som', 'microfone', 'lapela', 'vara', 'boom', 'shotgun', 'ambiente', 'room tone', 'musica', 'direitos', 'tecnico de som', 'captacao', 'playback', 'adr', 'dublagem', 'locadora'],
+    body: [
+      { t: 'p', text: 'A janela Som (botão “Som” na barra, ou Ctrl+Alt+7) é a pré-produção do técnico de som. Ela tem quatro abas: Planta, Ficha por cena, Ambientes e músicas, Equipamento. Nada do que se faz aqui muda o Mapa de Luz.' },
+      { t: 'ul', items: ['Planta: escolha à esquerda um mapa de luz; a planta dele aparece clarinha e os microfones vão por cima. Uma cena sem mapa de luz pode ganhar uma planta só de som (“Criar planta de som”, com largura e fundo).', 'A paleta tem os unidirecionais (cardioide, supercardioide, shotgun) e os outros (omnidirecional, figura 8, lapela, gravador). O desenho mostra para onde o microfone capta e até onde. Arraste para mover, gire pela bolinha (de 15 em 15 graus; com Shift, livre); setas movem 0,1 m; Delete apaga; Ctrl+Z desfaz.', 'No painel do microfone: nome, tipo, modelo, canal, sem fio, altura, alcance e rotação; “Na vara de” para shotgun e supercardioide; “Preso em” para a lapela, que passa a acompanhar o ator do mapa. “Escrever o microfone” aceita uma linha como “shotgun canal 1 a 2,1 m”.', 'Ficha por cena: captação (som direto, dublagem, playback, sem som), quem fala e como é captado, riscos do local, o que pedir no set, room tone, efeitos, playback e observações. A ficha fica presa à cena, mesmo que ela mude de número. “Exportar fichas (PDF)” imprime uma ficha por cena com conteúdo.', 'Ambientes e músicas: por locação, o que gravar além dos diálogos; e a lista de músicas, com as cenas em que entram, tipo, duração e direitos. Exporta em PDF (as duas tabelas) e as músicas em CSV.', 'Equipamento: os microfones das plantas entram sozinhos (marcados “da planta”, na quantidade mais usada de uma vez numa planta); o resto se acrescenta em “+ Item”. Cada linha tem locadora, retirado, devolvido e observações.', 'Na Filmagem, a ordem do dia de cada dia ganha uma linha “Som:” em cada cena e, no alto, os ambientes que ainda faltam gravar nas locações do dia. Em Relatórios aparecem “Músicas” e “Equipamento de som”.'] }
+    ]
+  },
+  {
     id: 'fichas',
     title: 'Fichas de personagem',
     group: 'Planejar',

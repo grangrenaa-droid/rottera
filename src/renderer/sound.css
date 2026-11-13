@@ -72,6 +72,19 @@
 .snd-song-scenes .snd-choices { padding: 6px 0 0 16px; }
 .snd-song-scenes label.check { display: inline-flex; gap: 6px; font-weight: 400; font-size: 13px; }
 
+/* the equipment list (shared: Som now, Luz later) */
+.equipment { display: grid; gap: 12px; max-width: 1100px; }
+.equipment-head { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.equipment-head p { margin: 0; }
+.equipment-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.equipment-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--color-text-muted); border-bottom: 1px solid var(--color-border); padding: 6px 6px; }
+.equipment-table td { border-bottom: 1px solid var(--color-border); padding: 4px 6px; vertical-align: middle; }
+.equipment-table input:not([type="checkbox"]) { width: 100%; }
+.equipment-table .eq-qty { width: 72px; text-align: right; }
+.equipment-table .eq-check { width: 84px; text-align: center; }
+.eq-tag { font-size: 11px; color: #7c3aed; border: 1px solid currentColor; border-radius: 999px; padding: 0 6px; margin-left: 4px; white-space: nowrap; }
+:root[data-theme="night"] .eq-tag, :root[data-theme="midnight"] .eq-tag { color: #c4b5fd; }
+
 @media (max-width: 1200px) {
   .snd-plan { grid-template-columns: 200px minmax(0, 1fr); }
   .snd-panel { grid-column: 1 / -1; max-height: none; }

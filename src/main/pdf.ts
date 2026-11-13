@@ -306,7 +306,7 @@ body { font: 12pt/12pt 'Courier Prime', 'Courier New', Courier, monospace }
 .lm-table td.nw { white-space: nowrap }
 .lm-load { margin: 6pt 0 0 }
 /* a sound plan: the drawing a little shorter, so its table fits below it */
-.snd-svg svg { max-height: 5.2in; width: auto; max-width: 100% }
+.snd-svg svg { max-height: 5.2in }
 .lm-tech-in { margin-top: 10pt; font-size: 8.5pt; line-height: 11pt }
 .ch { padding-top: 0 }
 .ch-body { position: absolute; left: ${SB_PAGE.left}in; right: ${SB_PAGE.right}in; top: 0.95in; bottom: 0.7in; overflow: hidden; font-size: 10pt; line-height: 13pt }

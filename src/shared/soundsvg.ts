@@ -61,7 +61,8 @@ export function soundLayerSvg(plan: SoundPlan, map: LightMap | null, opts: { sel
         ? `<rect x="-10" y="-7" width="20" height="14" rx="2" fill="#fff" stroke="${MIC}" stroke-width="2"/>`
         : `<circle r="${m.type === 'lavalier' ? 5 : 7}" fill="#fff" stroke="${MIC}" stroke-width="2"/>`
     const ring = selected ? `<circle r="13" fill="none" stroke="${KNOB}" stroke-width="2"/>` : ''
-    const name = `<text y="24" text-anchor="middle" font-size="11" font-family="Segoe UI, Arial, sans-serif" fill="${MIC}">${escapeXml(m.label || def.label)}</text>`
+    // a lavalier on an actor writes its name above, so the actor's own name below stays readable
+    const name = `<text y="${actor ? -14 : 24}" text-anchor="middle" font-size="11" font-family="Segoe UI, Arial, sans-serif" fill="${MIC}">${escapeXml(m.label || def.label)}</text>`
     return `<g data-mic="${escapeXml(m.id)}" transform="translate(${x},${y})"${opts.interactive ? ' style="cursor:move"' : ''}>${turn}${ring}${symbol}${name}</g>`
   })
   return `<g class="sound-layer">${out.join('')}</g>`

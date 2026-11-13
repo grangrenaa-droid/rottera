@@ -151,3 +151,12 @@ describe('page text', () => {
     expect(JSON.stringify(t.body)).toContain('(CONT.)')
   })
 })
+
+describe('the Som window in the manual', () => {
+  it('has a topic that names its tabs and its shortcut', () => {
+    const t = MANUAL.find((x) => x.id === 'som')
+    expect(t?.group).toBe('Produção')
+    const text = JSON.stringify(t?.body ?? '')
+    for (const q of ['Ficha por cena', 'Ctrl+Alt+7', 'Ambientes e músicas', 'Equipamento']) expect(text).toContain(q)
+  })
+})
