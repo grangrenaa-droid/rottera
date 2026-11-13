@@ -16,6 +16,7 @@ import {
   describeItem,
   effectiveKelvin,
   fieldOfView,
+  hasModel,
   isLight,
   isPathMove,
   itemHasCone,
@@ -776,6 +777,18 @@ export function LightMapView({ maps, scenes, onChange, onExport, focusMap }: Pro
                 return r
               }}
             />
+            {hasModel(selected.type) && (
+              <>
+                <label htmlFor="it-model">Modelo</label>
+                <input
+                  id="it-model"
+                  value={selected.model ?? ''}
+                  maxLength={80}
+                  placeholder={selected.type === 'camera' ? 'Ex.: Sony FX6, Arri Alexa Mini' : 'Ex.: Arri 650 Plus, Aputure 600d'}
+                  onChange={(e) => updateItem(selected.id, { model: e.target.value || undefined }, false)}
+                />
+              </>
+            )}
             <label htmlFor="it-label">Legenda</label>
             <input
               id="it-label"

@@ -61,6 +61,8 @@ export const ITEM_DEFS: Record<LightItemType, ItemDef> = {
 export const ITEM_TYPES = Object.keys(ITEM_DEFS) as LightItemType[]
 
 export const isLight = (t: LightItemType): boolean => ITEM_DEFS[t].group === 'Luzes'
+/** Pieces that are equipment to rent or bring (lights, cameras, modifiers, set and power): they have a model. */
+export const hasModel = (t: LightItemType): boolean => ['Luzes', 'Câmera', 'Modificadores', 'Set e energia'].includes(ITEM_DEFS[t].group)
 
 // ---------------------------------------------------------------- the technical sheet
 
@@ -470,6 +472,8 @@ export function cleanItem(raw: Partial<LightItem>, width: number, height: number
   const text = (v: unknown, max: number): string | undefined => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : undefined)
   const opt = (v: unknown, lo: number, hi: number, round = false): number | undefined =>
     typeof v === 'number' && Number.isFinite(v) ? clamp(round ? Math.round(v) : v, lo, hi) : undefined
+  const model = hasModel(type) ? text(raw.model, 80) : undefined
+  if (model) it.model = model
   if (isLight(type)) {
     const extra: Partial<LightItem> = {
       watts: opt(raw.watts, 0, 24000, true),
@@ -1129,8 +1133,9 @@ export function gearList(maps: LightMap[]): GearLine[] {
       if (!isLight(it.type)) continue
       const w = wattsOf(it)
       if (w === 0 && (it.type === 'sun' || it.type === 'moon')) continue
-      const key = `${it.type}|${w}`
-      const line = lines.get(key) ?? { type: it.type, name: ITEM_DEFS[it.type].name, watts: w, count: 0, maps: [] }
+      const model = it.model?.trim() ?? ''
+      const key = `${it.type}|${w}|${model}`
+      const line = lines.get(key) ?? { type: it.type, name: model ? `${ITEM_DEFS[it.type].name} · ${model}` : ITEM_DEFS[it.type].name, watts: w, count: 0, maps: [] }
       line.count += 1
       const name = m.name || 'Sem nome'
       if (!line.maps.includes(name)) line.maps.push(name)
@@ -1166,6 +1171,7 @@ export function sheetRows(map: LightMap): { lights: string[][]; cameras: string[
       return [
         String(numbers.get(it.id) ?? ''),
         ITEM_DEFS[it.type].name,
+        it.model || '—',
         it.label || '—',
         roleLabel(it.role) || '—',
         w ? `${br(w)} W` : '—',
@@ -1180,6 +1186,7 @@ export function sheetRows(map: LightMap): { lights: string[][]; cameras: string[
     .filter((it) => it.type === 'camera')
     .map((it) => [
       it.label || 'Câmera',
+      it.model || '—',
       it.lens ? `${it.lens} mm` : '—',
       it.lens ? SENSORS.find((s) => s.id === it.sensor)?.label ?? 'Super 35' : '—',
       `${spreadOf(it)}°`,
@@ -1190,5 +1197,5 @@ export function sheetRows(map: LightMap): { lights: string[][]; cameras: string[
   return { lights, cameras }
 }
 
-export const LIGHT_COLUMNS = ['Nº', 'Aparelho', 'Legenda', 'Função', 'Potência', 'Temperatura', 'Gelatina', 'Difusão', 'Intensidade', 'Altura']
-export const CAMERA_COLUMNS = ['Câmera', 'Lente', 'Sensor', 'Ângulo', 'Altura', 'Plano', 'Movimento']
+export const LIGHT_COLUMNS = ['Nº', 'Aparelho', 'Modelo', 'Legenda', 'Função', 'Potência', 'Temperatura', 'Gelatina', 'Difusão', 'Intensidade', 'Altura']
+export const CAMERA_COLUMNS = ['Câmera', 'Modelo', 'Lente', 'Sensor', 'Ângulo', 'Altura', 'Plano', 'Movimento']

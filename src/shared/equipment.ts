@@ -1,5 +1,5 @@
-import type { EquipItem, EquipState, LightMap, Sound } from './types'
-import { electricLoad, gearList, mapWatts, wattsOf } from './lightmap'
+import type { EquipItem, EquipState, LightItem, LightItemType, LightMap, Sound } from './types'
+import { ITEM_DEFS, ITEM_TYPES, electricLoad, hasModel, mapWatts, wattsOf } from './lightmap'
 import type { Report } from './reports'
 import { MIC_DEFS, cleanEquipItem } from './sound'
 
@@ -64,20 +64,31 @@ export function equipmentReport(
 }
 
 /**
- * The lights of the light maps, by type and power ("fresnel|2000"), in the order of the light palette. The quantity
- * is the most of them on one map: the same lights go from one set to the next.
+ * The equipment of the light maps (lights, cameras, modifiers, set and power), by type, power and model
+ * ("fresnel|2000", "fresnel|650|Arri 650 Plus", "camera|0|Sony FX6"), in the order of the palette. The quantity is the
+ * most of them on one map: the same equipment goes from one set to the next. Sun and moon without power are left out.
  */
 export function lightAutoLines(maps: LightMap[]): AutoLine[] {
-  const lines = new Map<string, AutoLine>()
-  for (const g of gearList(maps)) {
-    const key = `${g.type}|${g.watts}`
-    lines.set(key, { key, name: g.watts > 0 ? `${g.name} ${g.watts.toLocaleString('pt-BR')} W` : g.name, qty: 0 })
+  const lines = new Map<string, AutoLine & { type: LightItemType; watts: number }>()
+  const keyOf = (it: LightItem): string | null => {
+    if (!hasModel(it.type)) return null
+    const w = wattsOf(it)
+    if (w === 0 && (it.type === 'sun' || it.type === 'moon')) return null
+    const model = it.model?.trim() ?? ''
+    return `${it.type}|${w}${model ? `|${model}` : ''}`
   }
   for (const m of maps) {
     const here = new Map<string, number>()
     for (const it of m.items) {
-      const key = `${it.type}|${wattsOf(it)}`
-      if (lines.has(key)) here.set(key, (here.get(key) ?? 0) + 1)
+      const key = keyOf(it)
+      if (!key) continue
+      here.set(key, (here.get(key) ?? 0) + 1)
+      if (!lines.has(key)) {
+        const w = wattsOf(it)
+        const model = it.model?.trim() ?? ''
+        const name = `${ITEM_DEFS[it.type].name}${w > 0 ? ` ${w.toLocaleString('pt-BR')} W` : ''}${model ? ` · ${model}` : ''}`
+        lines.set(key, { key, name, qty: 0, type: it.type, watts: w })
+      }
     }
     for (const [key, n] of here) {
       const line = lines.get(key) as AutoLine
@@ -85,6 +96,8 @@ export function lightAutoLines(maps: LightMap[]): AutoLine[] {
     }
   }
   return [...lines.values()]
+    .sort((a, b) => ITEM_TYPES.indexOf(a.type) - ITEM_TYPES.indexOf(b.type) || b.watts - a.watts)
+    .map(({ key, name, qty }) => ({ key, name, qty }))
 }
 
 /** The load of the heaviest light map: what one set draws at once. */

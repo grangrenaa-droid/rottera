@@ -185,6 +185,26 @@ test.describe('F28 the Luz window', () => {
     expect(c.sun).toMatch(/^nasce 06:4\d · golden hour \d\d:\d\d–\d\d:\d\d · se põe 17:\d\d$/)
   })
 
+  test('F28-H6 a light gets its model above the caption, and the model goes into the equipment list', async ({ app, page, dialogs }) => {
+    const dir = await open(page, dialogs)
+    await menu(app, 'view-lightmap')
+    await page.getByRole('button', { name: 'Criar o primeiro mapa' }).click()
+    await page.locator('.lm-piece', { hasText: 'Fresnel' }).first().click()
+    const model = page.getByLabel('Modelo', { exact: true })
+    const caption = page.getByLabel('Legenda', { exact: true })
+    const [m, c] = [await model.boundingBox(), await caption.boundingBox()]
+    expect(m && c && m.y < c.y, 'Modelo above Legenda').toBe(true)
+    await model.fill('Arri 1K')
+    // an actor is not equipment: no model
+    await page.locator('.lm-piece', { hasText: 'Ator ou atriz' }).click()
+    await expect(page.getByLabel('Modelo', { exact: true })).toHaveCount(0)
+
+    await tab(page, 'Equipamento').click()
+    await expect(page.locator('tr', { hasText: 'Fresnel 1.000 W · Arri 1K' })).toContainText('da planta')
+    const saved = await saveAs(app, page, dialogs, join(dir, 'modelo.rottera'))
+    expect(saved.lightMaps[0].items.find((i: { type: string }) => i.type === 'fresnel').model).toBe('Arri 1K')
+  })
+
   test('F28-L1 the short Som and Luz buttons on the toolbar are wide enough to hit', async ({ page, dialogs }) => {
     await open(page, dialogs)
     for (const name of ['Som', 'Luz']) {

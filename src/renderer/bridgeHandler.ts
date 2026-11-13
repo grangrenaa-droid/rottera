@@ -72,7 +72,7 @@ function noteText(v: unknown): string {
 }
 
 /** The technical-sheet fields of a light-map piece that the AI can read and write. */
-const TECH_KEYS = ['watts', 'kelvin', 'gel', 'diffusion', 'intensity', 'role', 'height', 'lens', 'sensor', 'move', 'shot', 'moveTo', 'moveVia', 'moveRot', 'endRange', 'panAngle', 'movePoints'] as const
+const TECH_KEYS = ['model', 'watts', 'kelvin', 'gel', 'diffusion', 'intensity', 'role', 'height', 'lens', 'sensor', 'move', 'shot', 'moveTo', 'moveVia', 'moveRot', 'endRange', 'panAngle', 'movePoints'] as const
 
 function fail(msg: string): never {
   throw new Error(msg)

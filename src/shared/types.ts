@@ -147,6 +147,8 @@ export interface LightItem {
   /** Degrees, 0 = pointing to the top of the drawing, clockwise. */
   rotation: number
   label: string
+  /** The make and model of a piece of equipment ("Arri 650 Plus", "Sony FX6"): it goes into the equipment list. */
+  model?: string
   /** Beam or field-of-view angle in degrees (cameras and lights). */
   spread?: number
   /** Beam length in metres. */

@@ -31,11 +31,14 @@ import {
   newItem,
   newLightMap,
   sheetRows,
+  LIGHT_COLUMNS,
+  CAMERA_COLUMNS,
   spreadOf,
   techSummary
 } from '../src/shared/lightmap'
 import { cleanFrame, shotText } from '../src/shared/storyboard'
 import { buildReports } from '../src/shared/reports'
+import { lightAutoLines } from '../src/shared/equipment'
 import { buildPdfHtml } from '../src/main/pdf'
 import type { LightMap, Script } from '../src/shared/types'
 
@@ -191,7 +194,7 @@ describe('camera movement on the map', () => {
     expect(back).toEqual(expect.objectContaining({ moveTo: { x: 8, y: 2 }, panAngle: 180 }))
     expect(cleanItem({ type: 'camera', x: 1, y: 1, moveTo: 'ali' } as never, 8, 6)?.moveTo).toBeUndefined()
     for (const t of ['crane', 'gimbal', 'slider']) expect(ITEM_TYPES).not.toContain(t)
-    expect(sheetRows({ ...newLightMap(), items: [cam({ move: 'Travelling' })] }).cameras[0][6]).toBe('Travelling · 2 m')
+    expect(sheetRows({ ...newLightMap(), items: [cam({ move: 'Travelling' })] }).cameras[0][7]).toBe('Travelling · 2 m')
   })
 })
 
@@ -383,5 +386,35 @@ describe('pieces offered for a light map', () => {
     const cameraPiece = svg.slice(svg.indexOf('data-item="c"'), svg.indexOf('data-item="a"'))
     expect(cameraPiece).not.toContain('fill-opacity="0.16"')
     expect(svg.slice(svg.indexOf('data-item="l"'), layer)).toContain('fill-opacity="0.16"') // the light's beam
+  })
+})
+
+describe('the model of a piece of equipment', () => {
+  const m = (items: LightMap['items']): LightMap => ({ ...newLightMap('Set'), items })
+  it('is kept for equipment (lights, cameras, modifiers, set and power) and not for actors or scenery', () => {
+    expect(cleanItem({ ...newItem('fresnel', 1, 1), model: '  Arri 650 Plus ' }, 6, 4)?.model).toBe('Arri 650 Plus')
+    expect(cleanItem({ ...newItem('camera', 1, 1), model: 'Sony FX6' }, 6, 4)?.model).toBe('Sony FX6')
+    expect(cleanItem({ ...newItem('monitor', 1, 1), model: 'SmallHD 703' }, 6, 4)?.model).toBe('SmallHD 703')
+    expect(cleanItem({ ...newItem('actor', 1, 1), model: 'x' }, 6, 4)?.model).toBeUndefined()
+    expect(cleanItem({ ...newItem('wall', 1, 1), model: 'x' }, 6, 4)?.model).toBeUndefined()
+  })
+
+  it('shows in the technical sheet', () => {
+    const rows = sheetRows(m([{ ...newItem('fresnel', 1, 1), model: 'Arri 650 Plus' }, { ...newItem('camera', 2, 2), model: 'Sony FX6' }]))
+    expect(LIGHT_COLUMNS.slice(0, 3)).toEqual(['Nº', 'Aparelho', 'Modelo'])
+    expect(rows.lights[0][2]).toBe('Arri 650 Plus')
+    expect(CAMERA_COLUMNS.slice(0, 2)).toEqual(['Câmera', 'Modelo'])
+    expect(rows.cameras[0][1]).toBe('Sony FX6')
+  })
+
+  it('separates lines of the equipment list, which also has cameras, modifiers and set pieces', () => {
+    const maps = [m([{ ...newItem('fresnel', 1, 1), model: 'Arri 650 Plus', watts: 650 }, { ...newItem('fresnel', 2, 1), watts: 650 }, { ...newItem('camera', 3, 3), model: 'Sony FX6' }, newItem('flag', 1, 2), newItem('flag', 2, 2), newItem('actor', 1, 1), newItem('wall', 1, 1)])]
+    expect(lightAutoLines(maps).map((l) => [l.name, l.qty])).toEqual([
+      ['Câmera · Sony FX6', 1],
+      ['Fresnel 650 W · Arri 650 Plus', 1],
+      ['Fresnel 650 W', 1],
+      ['Bandeira (negativo)', 2]
+    ])
+    expect(gearList(maps).map((g) => g.name)).toEqual(['Fresnel · Arri 650 Plus', 'Fresnel'])
   })
 })
