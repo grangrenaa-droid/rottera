@@ -6,7 +6,7 @@ import { PAPER, paginate, type Pagination } from './paginate'
 import { parseHeading } from './smarttype'
 import { sceneNumbers } from './scenes'
 import { newId } from './structures'
-import { cleanPlace, isDate } from './sun'
+import { cleanPlace, isDate, longDate } from './sun'
 
 /** The breakdown categories, in the order a breakdown sheet lists them. */
 export const CATEGORIES: { id: BreakdownCategory; label: string }[] = [
@@ -760,7 +760,7 @@ export interface DaySound {
   ambiences(locations: string[]): string
 }
 
-function callSheetOf(day: ShootDay, n: number, total: number, list: PlanEntry[], p: Production, sound?: DaySound): CallSheet {
+function callSheetOf(day: ShootDay, n: number, total: number, list: PlanEntry[], p: Production, sound?: DaySound, sun?: string): CallSheet {
   const locations: string[] = []
   for (const e of list) {
     const l = e.scene.location || e.scene.heading
@@ -773,6 +773,8 @@ function callSheetOf(day: ShootDay, n: number, total: number, list: PlanEntry[],
     locations,
     summary: daySummary(list),
     notes: day.notes.trim(),
+    ...(day.date ? { date: longDate(day.date) } : {}),
+    ...(sun ? { sun } : {}),
     ...(sound ? { ambiences: sound.ambiences([...new Set(list.map((e) => locationKey(e.scene)))]) } : {}),
     scenes: list.map((e) => ({
       time: e.time,
@@ -792,7 +794,7 @@ function callSheetOf(day: ShootDay, n: number, total: number, list: PlanEntry[],
 }
 
 /** The call sheet for one day: a table for the screen and the CSV, a day sheet for the PDF. */
-export function dayReport(day: ShootDay, n: number, scenes: SceneInfo[], p: Production, shots: Map<string, ShotInfo[]> = new Map(), sound?: DaySound): Report {
+export function dayReport(day: ShootDay, n: number, scenes: SceneInfo[], p: Production, shots: Map<string, ShotInfo[]> = new Map(), sound?: DaySound, sun?: string): Report {
   const withShots = hasShots(shots)
   const columns = withShots ? PLAN_COLUMNS_SHOTS : PLAN_COLUMNS
   const list = dayEntries(day, scenes, p, shots)
@@ -804,7 +806,7 @@ export function dayReport(day: ShootDay, n: number, scenes: SceneInfo[], p: Prod
     title: `Ordem do dia · ${dayLabel(day, n)}`,
     columns,
     rows,
-    printed: { columns, sections: [daySection(day, n, scenes, p, shots, 'Cenas do dia')], callsheet: callSheetOf(day, n, p.days.length, list, p, sound) }
+    printed: { columns, sections: [daySection(day, n, scenes, p, shots, 'Cenas do dia')], callsheet: callSheetOf(day, n, p.days.length, list, p, sound, sun) }
   }
 }
 

@@ -208,3 +208,13 @@ describe('sound on the day sheet', () => {
     expect(html).toContain('<p class="cs-locs"><b>Gravar ambientes:</b> COZINHA: geladeira</p>')
   })
 })
+
+describe('sun on the day sheet', () => {
+  it('prints the date and a "Sol:" line when the day has them', () => {
+    const c = { day: 'Dia 1', dayOf: 'Dia 1 de 1', start: '', locations: [], summary: '', notes: '', scenes: [] }
+    const html = buildReportHtml({ ...base, callsheet: { ...c, date: 'Sábado, 20/11/2026', sun: 'nasce 05:10 · se põe 18:20' } })
+    expect(html).toContain('<span>Sábado, 20/11/2026</span>')
+    expect(html).toContain('<p class="cs-locs"><b>Sol:</b> nasce 05:10 · se põe 18:20</p>')
+    expect(buildReportHtml({ ...base, callsheet: c })).not.toContain('<b>Sol:</b>')
+  })
+})

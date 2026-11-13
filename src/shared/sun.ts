@@ -21,6 +21,12 @@ export const isDate = (v: unknown): v is string => {
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v
 }
 
+/** "20/11/2026". */
+export const shortDate = (date: string): string => `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}`
+const WEEKDAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
+/** "Sexta, 20/11/2026". */
+export const longDate = (date: string): string => `${WEEKDAYS[new Date(`${date}T12:00:00Z`).getUTCDay()]}, ${shortDate(date)}`
+
 /** A place as the file brings it, or nothing when it makes no sense. */
 export function cleanPlace(raw: unknown): Place | undefined {
   if (!raw || typeof raw !== 'object') return undefined

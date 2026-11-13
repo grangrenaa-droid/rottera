@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { cleanEquipment, equipmentReport, soundAutoLines } from '../src/shared/equipment'
+import { cleanEquipment, equipmentReport, heaviestLoad, lightAutoLines, soundAutoLines } from '../src/shared/equipment'
+import { newItem } from '../src/shared/lightmap'
 import { emptySound, newMic } from '../src/shared/sound'
-import type { Sound } from '../src/shared/types'
+import type { LightMap, Sound } from '../src/shared/types'
 
 function sound(): Sound {
   const s = emptySound()
@@ -46,5 +47,19 @@ describe('the equipment list as a report', () => {
     expect(cleanEquipment([{ id: 'e1', name: 'Fone', qty: 2 }, { name: 'sem id' }, 'x'])).toEqual([
       { id: 'e1', name: 'Fone', qty: 2, rental: '', out: false, back: false, notes: '' }
     ])
+  })
+})
+
+describe('equipment that comes from the light maps', () => {
+  it('counts each light by type and power, the most used at once on one map', () => {
+    const map = (id: string, items: LightMap['items']): LightMap => ({ id, name: id, scene: '', width: 6, height: 4, items, notes: '', includeInPdf: true })
+    const f = (w: number) => ({ ...newItem('fresnel', 1, 1), watts: w })
+    const maps = [map('a', [f(2000), f(2000), f(650)]), map('b', [f(2000), newItem('actor', 1, 1)])]
+    expect(lightAutoLines(maps).map((l) => [l.key, l.qty])).toEqual([
+      ['fresnel|2000', 2],
+      ['fresnel|650', 1]
+    ])
+    expect(lightAutoLines(maps)[0].name).toMatch(/2\.000 W$/)
+    expect(heaviestLoad(maps).watts).toBe(4650)
   })
 })

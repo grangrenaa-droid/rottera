@@ -1,4 +1,5 @@
-import type { EquipItem, EquipState, Sound } from './types'
+import type { EquipItem, EquipState, LightMap, Sound } from './types'
+import { electricLoad, gearList, mapWatts, wattsOf } from './lightmap'
 import type { Report } from './reports'
 import { MIC_DEFS, cleanEquipItem } from './sound'
 
@@ -60,4 +61,33 @@ export function equipmentReport(
   })
   for (const i of items) rows.push([dash(i.name), i.qty, dash(i.rental), yes(i.out), yes(i.back), dash(i.notes)])
   return { id, title, columns: ['Item', 'Qtd.', 'Locadora', 'Retirado', 'Devolvido', 'Observações'], rows }
+}
+
+/**
+ * The lights of the light maps, by type and power ("fresnel|2000"), in the order of the light palette. The quantity
+ * is the most of them on one map: the same lights go from one set to the next.
+ */
+export function lightAutoLines(maps: LightMap[]): AutoLine[] {
+  const lines = new Map<string, AutoLine>()
+  for (const g of gearList(maps)) {
+    const key = `${g.type}|${g.watts}`
+    lines.set(key, { key, name: g.watts > 0 ? `${g.name} ${g.watts.toLocaleString('pt-BR')} W` : g.name, qty: 0 })
+  }
+  for (const m of maps) {
+    const here = new Map<string, number>()
+    for (const it of m.items) {
+      const key = `${it.type}|${wattsOf(it)}`
+      if (lines.has(key)) here.set(key, (here.get(key) ?? 0) + 1)
+    }
+    for (const [key, n] of here) {
+      const line = lines.get(key) as AutoLine
+      line.qty = Math.max(line.qty, n)
+    }
+  }
+  return [...lines.values()]
+}
+
+/** The load of the heaviest light map: what one set draws at once. */
+export function heaviestLoad(maps: LightMap[]): { watts: number; a127: number; a220: number } {
+  return electricLoad(maps.reduce((w, m) => Math.max(w, mapWatts(m)), 0))
 }

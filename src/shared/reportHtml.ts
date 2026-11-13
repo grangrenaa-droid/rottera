@@ -53,6 +53,10 @@ export interface CallSheet {
   notes: string
   /** The ambiences still to record at the day's locations (Som window), or nothing. */
   ambiences?: string
+  /** The day's date ("Sexta, 20/11/2026"), when it has one. */
+  date?: string
+  /** The day's sun on one line (Luz window), when the day has a date and a place. */
+  sun?: string
   scenes: CallSheetScene[]
 }
 
@@ -132,6 +136,8 @@ function cleanCallSheet(c: CallSheet): CallSheet {
     summary: str(x.summary, 200),
     notes: str(x.notes, MAX_CELL),
     ambiences: str(x.ambiences, MAX_CELL),
+    date: str(x.date, 60),
+    sun: str(x.sun, 400),
     scenes: list(x.scenes, 2000, (s) => ({
       time: str(s.time, 20),
       number: str(s.number, 40),
@@ -151,11 +157,12 @@ function cleanCallSheet(c: CallSheet): CallSheet {
 
 /** The day sheet: a heading with the day, then one block per scene with its shots, cast and elements. */
 function callSheetHtml(c: CallSheet, scriptTitle: string): string {
-  const meta = [c.dayOf, c.start ? `Início ${c.start}` : '', c.summary].filter(Boolean)
+  const meta = [c.date ?? '', c.dayOf, c.start ? `Início ${c.start}` : '', c.summary].filter(Boolean)
   const head =
     `<header class="cs-head"><p class="cs-film">${esc(scriptTitle || 'Sem título')}</p><h1>Ordem do dia · ${esc(c.day)}</h1>` +
     `<p class="cs-meta">${meta.map((m) => `<span>${esc(m)}</span>`).join('')}</p>` +
     (c.locations.length ? `<p class="cs-locs"><b>Locações:</b> ${esc(c.locations.join(' · '))}</p>` : '') +
+    (c.sun?.trim() ? `<p class="cs-locs"><b>Sol:</b> ${esc(c.sun)}</p>` : '') +
     (c.ambiences?.trim() ? `<p class="cs-locs"><b>Gravar ambientes:</b> ${esc(c.ambiences)}</p>` : '') +
     (c.notes.trim() ? `<div class="cs-notes">${esc(c.notes)}</div>` : '') +
     `</header>`
