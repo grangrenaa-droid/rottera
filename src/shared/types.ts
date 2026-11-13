@@ -72,6 +72,8 @@ export interface Extras {
 export interface RevisionState {
   mode: boolean
   color: string
+  /** The day (YYYY-MM-DD) each set's round started, for the heading of the changed pages in the PDF. */
+  dates?: Record<string, string>
 }
 
 export type StoryboardAspect = '16:9' | '2.39:1' | '4:3' | '1:1' | '9:16'

@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import type { Beat, Board } from '../shared/types'
-import type { BeatLink } from '../shared/beats'
+import type { BeatLink, OutlineGroup } from '../shared/beats'
 import { STRUCTURES, STRUCTURE_FAMILIES, boardFromStructure, newId } from '../shared/structures'
+import { EscaletaView } from './Escaleta'
 
 const COLORS: { id: string; label: string }[] = [
   { id: '', label: 'Sem cor' },
@@ -19,13 +20,57 @@ interface Props {
   links: Map<string, BeatLink>
   onSendAll(): void
   onGoToScene(block: number): void
+  /** Every scene of the script, grouped by beat, for the outline column. */
+  outline: OutlineGroup[]
+  onSetHeading(block: number, text: string): void
+  onSetSynopsis(block: number, text: string): void
+  /** Adds a scene at the end of this beat's group; returns the new heading's block, or -1. */
+  onAddScene(beatId: string | null): number
 }
 
-export function BoardView({ board, onChange, onMakeScene, links, onSendAll, onGoToScene }: Props): JSX.Element {
+const OUTLINE_KEY = 'rottera:board-outline'
+
+function outlineShownAtStart(): boolean {
+  try {
+    return localStorage.getItem(OUTLINE_KEY) !== '0'
+  } catch {
+    return true
+  }
+}
+
+export function BoardView({ board, onChange, onMakeScene, links, onSendAll, onGoToScene, outline, onSetHeading, onSetSynopsis, onAddScene }: Props): JSX.Element {
   const unsentCount = board.beats.filter((b) => !links.has(b.id)).length
   const [structure, setStructure] = useState(STRUCTURES[0].id)
   const [dragging, setDragging] = useState<string | null>(null)
   const chosen = STRUCTURES.find((s) => s.id === structure)
+  const [showOutline, setShowOutline] = useState(outlineShownAtStart)
+  const [reveal, setReveal] = useState<{ beatId: string | null; n: number } | null>(null)
+  const [focusNew, setFocusNew] = useState<{ block: number; n: number } | null>(null)
+  const sceneCount = new Map(outline.map((g) => [g.beatId, g.scenes.length]))
+
+  const toggleOutline = (show: boolean): void => {
+    setShowOutline(show)
+    // old requests must not fire again when the column comes back
+    if (!show) {
+      setFocusNew(null)
+      setReveal(null)
+    }
+    try {
+      localStorage.setItem(OUTLINE_KEY, show ? '1' : '0')
+    } catch {
+      // the choice just isn't remembered
+    }
+  }
+
+  const revealBeat = (beatId: string): void => {
+    if (!showOutline) toggleOutline(true)
+    setReveal((r) => ({ beatId, n: (r?.n ?? 0) + 1 }))
+  }
+
+  const addScene = (beatId: string | null): void => {
+    const block = onAddScene(beatId)
+    if (block >= 0) setFocusNew((f) => ({ block, n: (f?.n ?? 0) + 1 }))
+  }
 
   const setBeat = (id: string, patch: Partial<Beat>): void =>
     onChange({ ...board, beats: board.beats.map((b) => (b.id === id ? { ...b, ...patch } : b)) })
@@ -80,6 +125,7 @@ export function BoardView({ board, onChange, onMakeScene, links, onSendAll, onGo
   }
 
   return (
+    <div className={showOutline ? 'board-with-outline' : 'board-with-outline no-outline'}>
     <div className="board" aria-label="Beat Board">
       <div className="board-bar">
         <label htmlFor="structure">Estrutura</label>
@@ -102,6 +148,9 @@ export function BoardView({ board, onChange, onMakeScene, links, onSendAll, onGo
         </button>
         <button className="btn secondary" disabled={unsentCount === 0} onClick={onSendAll}>
           {unsentCount === 0 ? 'Todos os beats já têm cena' : `Criar cenas para ${unsentCount} ${unsentCount === 1 ? 'beat' : 'beats'}`}
+        </button>
+        <button className="btn secondary" aria-pressed={showOutline} onClick={() => toggleOutline(!showOutline)}>
+          {showOutline ? 'Ocultar escaleta' : 'Mostrar escaleta'}
         </button>
       </div>
       {chosen?.origin && (
@@ -217,6 +266,15 @@ export function BoardView({ board, onChange, onMakeScene, links, onSendAll, onGo
                         >
                           Cena {links.get(beat.id)!.scene}
                         </button>
+                      ) : null}
+                      {links.has(beat.id) ? (
+                        <button
+                          className="link"
+                          aria-label={(sceneCount.get(beat.id) ?? 1) === 1 ? 'Ver a cena na escaleta' : `Ver as ${sceneCount.get(beat.id)} cenas na escaleta`}
+                          onClick={() => revealBeat(beat.id)}
+                        >
+                          · {sceneCount.get(beat.id) ?? 1} {(sceneCount.get(beat.id) ?? 1) === 1 ? 'cena' : 'cenas'}
+                        </button>
                       ) : (
                         <button className="btn ghost small" onClick={() => onMakeScene(beat)}>
                           Virar cena
@@ -238,6 +296,18 @@ export function BoardView({ board, onChange, onMakeScene, links, onSendAll, onGo
             </section>
           ))}
         </div>
+      )}
+    </div>
+      {showOutline && (
+        <EscaletaView
+          groups={outline}
+          reveal={reveal}
+          focusBlock={focusNew}
+          onSetHeading={onSetHeading}
+          onSetSynopsis={onSetSynopsis}
+          onAddScene={addScene}
+          onGoToScene={onGoToScene}
+        />
       )}
     </div>
   )

@@ -8,7 +8,7 @@ import { folderOf, whenOpened } from '../shared/recent'
 import { isDark, toggleTheme, type Theme } from '../shared/theme'
 import { lockScenes, moveSceneTo, sceneNumbers, sceneRanges, unlockScenes } from '../shared/scenes'
 import { renameCharacter, renameLocation } from '../shared/rename'
-import { beatLinks, sendBeats } from '../shared/beats'
+import { DEFAULT_HEADING, beatLinks, outlineInsertAt, scenesByBeat, sendBeats } from '../shared/beats'
 import { characterKey } from '../shared/characters'
 import { groupNotes, noteMarks } from '../shared/notes'
 import { newId } from '../shared/structures'
@@ -18,7 +18,13 @@ import { emptyProduction, sceneInfo } from '../shared/production'
 import { printable, type Report } from '../shared/reports'
 import { SYNOPSIS_MAX, cleanSynopsis } from '../shared/scriptfile'
 import { ProductionView, type SceneLinks } from './Production'
-import { REVISIONS, revisionLabel } from '../shared/revisions'
+import { REVISIONS, revisionLabel, startRevision } from '../shared/revisions'
+
+/** Today's date on this computer, as YYYY-MM-DD. */
+const today = (): string => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 import type { Template } from '../shared/templates'
 import { Editor, ELEMENT_OPTIONS, type CaretInfo, type EditorHandle } from './Editor'
 import { BoardView } from './Board'
@@ -136,6 +142,15 @@ function useToolbarFold(): { ref: (el: HTMLDivElement | null) => void; folded: (
   }, [])
   const folded = useCallback((k: FoldKey) => FOLD_ORDER.indexOf(k) < count, [count])
   return { ref, folded }
+}
+
+/**
+ * A field of the escaleta saves when it loses focus. Menu shortcuts and closing the window don't move the focus,
+ * so they blur it first: what was just typed goes into the script before saving, switching tabs or closing.
+ */
+function blurOutlineField(): void {
+  const el = document.activeElement
+  if (el instanceof HTMLElement && el.closest('.outline')) el.blur()
 }
 
 function baseName(path: string | null): string {
@@ -521,6 +536,15 @@ export function App(): JSX.Element {
     [scheduleAutosave]
   )
 
+  /** Brings the scene list up to the editor now, without the long-script delay (the escaleta works by block index). */
+  const syncBlocksNow = useCallback(() => {
+    const h = handle.current
+    if (!h) return
+    if (blocksTimer.current !== null) window.clearTimeout(blocksTimer.current)
+    blocksTimer.current = null
+    setBlocks(h.getBlocks())
+  }, [])
+
   const setBoard = useCallback(
     (b: Board) => {
       scriptRef.current = { ...scriptRef.current, board: b }
@@ -899,6 +923,8 @@ export function App(): JSX.Element {
       return rest
     })
     applyBlocks(bs, caret.block)
+    // the marks are gone, so are the rounds they belonged to: the next round starts with today's date
+    setRevision((r) => startRevision({ mode: r.mode, color: r.color }, today()))
     flash('Marcas de revisão removidas.')
   }, [applyBlocks, caret.block, flash])
 
@@ -948,6 +974,7 @@ export function App(): JSX.Element {
         return
       }
       h.replaceRange(0, h.getBlocks().length, r.blocks, { noRev: true })
+      syncBlocksNow()
       const first = beatLinks(r.blocks, board).get(r.created[0])
       if (only && first) {
         setPanel('script')
@@ -955,7 +982,7 @@ export function App(): JSX.Element {
       }
       flash(r.created.length === 1 ? 'Cena criada e ligada ao beat.' : `${r.created.length} cenas criadas e ligadas aos beats.`)
     },
-    [flash]
+    [flash, syncBlocksNow]
   )
 
   const makeSceneFromBeat = useCallback((beat: Beat) => sendBeatsToScript([beat.id]), [sendBeatsToScript])
@@ -963,6 +990,37 @@ export function App(): JSX.Element {
   const goToSceneBlock = useCallback((block: number) => {
     setPanel('script')
     window.setTimeout(() => handle.current?.focusBlock(block), 0)
+  }, [])
+
+  /** Escaleta column: a new heading for the scene at this block, kept with its beat link and synopsis. Undoable. */
+  const setOutlineHeading = useCallback((block: number, text: string) => {
+    const h = handle.current
+    const b = h?.getBlocks()[block]
+    const t = text.trim()
+    if (!h || !b || b.kind !== 'scene_heading' || !t || t === b.text.trim()) return
+    h.replaceRange(block, block + 1, [{ ...b, text: t }])
+  }, [])
+
+  /** Escaleta column: a new scene at the end of this beat's group (no bid, so it falls in that group). Returns its block, or -1. */
+  const addOutlineScene = useCallback((beatId: string | null): number => {
+    const h = handle.current
+    if (!h) return -1
+    const at = outlineInsertAt(h.getBlocks(), scriptRef.current.board ?? { lanes: [], beats: [] }, beatId)
+    if (at < 0) return -1
+    h.replaceRange(at, at, [{ kind: 'scene_heading', text: DEFAULT_HEADING }])
+    // the column must show the new scene now, or a long script would focus whatever sits at `at` for 150 ms
+    syncBlocksNow()
+    return at
+  }, [syncBlocksNow])
+
+  // arriving at the board, the escaleta's block indices must match the editor (a long script updates the list late)
+  useEffect(() => {
+    if (panel === 'board') syncBlocksNow()
+  }, [panel, syncBlocksNow])
+
+  /** Escaleta column: the synopsis of the scene at this block. Undoable. */
+  const setOutlineSynopsis = useCallback((block: number, text: string) => {
+    handle.current?.setSynopsis(block, cleanSynopsis(text))
   }, [])
 
   const pickTemplate = useCallback(
@@ -976,6 +1034,7 @@ export function App(): JSX.Element {
   // ------------------------------------------------------------ menu from the main process
   useEffect(() => {
     return window.api.onMenu((a: MenuAction) => {
+      blurOutlineField()
       switch (a) {
         case 'new': return doNew()
         case 'new-template': return setDialog('templates')
@@ -1033,6 +1092,7 @@ export function App(): JSX.Element {
   // the main process asks for a flush before it closes the window
   useEffect(() => {
     return window.api.onFlushRequest(() => {
+      blurOutlineField()
       void flushPending().finally(() => void window.api.flushDone())
     })
   }, [flushPending])
@@ -1348,8 +1408,8 @@ export function App(): JSX.Element {
             <button className="btn ghost" aria-pressed={panel === 'board'} onClick={() => setPanel('board')}>Beat Board</button>
             <button className="btn ghost" aria-pressed={panel === 'storyboard'} onClick={() => setPanel('storyboard')}>Storyboard</button>
             <button className="btn ghost" aria-pressed={panel === 'lightmap'} onClick={() => setPanel('lightmap')}>Mapa de Luz</button>
-            <button className="btn ghost" aria-pressed={panel === 'reports'} onClick={() => setPanel('reports')}>Relatórios</button>
             <button className="btn ghost" aria-pressed={panel === 'shooting'} onClick={() => setPanel('shooting')}>Filmagem</button>
+            <button className="btn ghost" aria-pressed={panel === 'reports'} onClick={() => setPanel('reports')}>Relatórios</button>
           </div>
           {!folded('nav') && (
             <button className="btn ghost" data-fold="nav" onClick={() => setNavigator((v) => !v)} aria-pressed={navigator}>Navegador</button>
@@ -1368,12 +1428,12 @@ export function App(): JSX.Element {
               <input
                 type="checkbox"
                 checked={revision.mode}
-                onChange={(e) => setRevision({ ...revision, mode: e.target.checked })}
+                onChange={(e) => setRevision(startRevision({ ...revision, mode: e.target.checked }, today()))}
               />
               Modo de revisão
             </label>
             <label className="stack" htmlFor="rev-color">Cor da revisão</label>
-            <select id="rev-color" value={revision.color} onChange={(e) => setRevision({ ...revision, color: e.target.value })}>
+            <select id="rev-color" value={revision.color} onChange={(e) => setRevision(startRevision({ ...revision, color: e.target.value }, today()))}>
               {REVISIONS.map((r) => (
                 <option key={r.id} value={r.id}>{r.label}</option>
               ))}
@@ -1555,6 +1615,10 @@ export function App(): JSX.Element {
               links={beatLinks(blocks, board)}
               onSendAll={() => sendBeatsToScript()}
               onGoToScene={goToSceneBlock}
+              outline={scenesByBeat(blocks, board)}
+              onSetHeading={setOutlineHeading}
+              onSetSynopsis={setOutlineSynopsis}
+              onAddScene={addOutlineScene}
             />
           )}
           {panel === 'storyboard' && (

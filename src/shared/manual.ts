@@ -146,7 +146,8 @@ export const MANUAL: ManualTopic[] = [
     keywords: ['alteracoes', 'cor', 'azul', 'rosa', 'marcas', 'asterisco', 'versao'],
     body: [
       { t: 'p', text: 'Em Produção, ligue “Modo de revisão” e escolha a cor. A partir daí, cada trecho que você mudar é marcado com um asterisco na margem direita, na cor da revisão. Para uma nova rodada, troque a cor.' },
-      { t: 'p', text: '“Limpar marcas de revisão” tira as marcas sem mexer no texto. O relatório “Revisões” lista o que foi marcado em cada cor.' }
+      { t: 'p', text: 'As marcas vão para quem recebe o roteiro: no PDF, cada linha alterada leva um asterisco na margem direita e cada página alterada leva no alto a revisão mais recente dela e a data em que a rodada começou (“REVISÃO ROSA · 12/11/2026”); no Word, o asterisco vai na margem ao lado de cada parágrafo alterado. Assim a equipe troca só as páginas que mudaram.' },
+      { t: 'p', text: '“Limpar marcas de revisão” tira as marcas sem mexer no texto e zera as datas das rodadas. O relatório “Revisões” lista o que foi marcado em cada cor.' }
     ]
   },
   {

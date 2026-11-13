@@ -5,6 +5,10 @@ import { SB_PAGE, shotText, storyboardPages } from '../shared/storyboard'
 import { CAMERA_COLUMNS, LIGHT_COLUMNS, lightMapSvg, loadText, mapWatts, sheetRows } from '../shared/lightmap'
 import { listCharacters, presentationOf } from '../shared/characters'
 import { sceneNumbers } from '../shared/scenes'
+import { latestRevision, revisionHeading } from '../shared/revisions'
+
+/** Where revision asterisks go, in inches from the page's left edge: the column of the right-hand scene numbers. */
+const MARK_COLUMN = 7.65
 
 function fontFace(file: string, weight: number): string {
   try {
@@ -183,20 +187,30 @@ export function buildPdfHtml(script: Script, opts: PdfOptions = {}): string {
     const body = pages
       .map((lines, idx) => {
         const num = idx > 0 ? `<div class="num">${idx + 1}.</div>` : ''
+        // revision mode: every changed line gets an asterisk in the right margin, and the page is headed with the
+        // latest set changed on it ("REVISÃO ROSA · 12/11/2026"), so whoever gets the pages sees what changed
+        const pageRevs = new Set<string>()
         const rows = lines
           .map((l) => {
             const style = `margin-left:${(l.left / 10).toFixed(1)}in;width:${(l.width / 10).toFixed(1)}in;${
               l.align === 'right' ? 'text-align:right;' : ''
             }${l.sameRow ? 'margin-top:-12pt;' : ''}`
+            const rev = l.block >= 0 ? script.blocks[l.block]?.rev : undefined
+            if (rev) pageRevs.add(rev)
             const n = l.kind === 'scene_heading' && l.block >= 0 && !numbered.has(l.block) ? numbers[l.block] : null
             if (n) numbered.add(l.block)
+            // a numbered heading carries the mark after its right-hand number; any other line in the margin column
             const sn = n
-              ? `<span class="sn" style="left:-${(l.left / 10 - 0.75).toFixed(2)}in">${esc(n)}</span><span class="sn" style="left:${(l.width / 10 + 0.15).toFixed(2)}in">${esc(n)}</span>`
-              : ''
+              ? `<span class="sn" style="left:-${(l.left / 10 - 0.75).toFixed(2)}in">${esc(n)}</span><span class="sn" style="left:${(l.width / 10 + 0.15).toFixed(2)}in">${esc(n)}${rev ? ' *' : ''}</span>`
+              : rev
+                ? `<span class="rv" style="left:${(MARK_COLUMN - l.left / 10).toFixed(2)}in">*</span>`
+                : ''
             return `<div class="l" style="${style}">${l.text === '' ? '&nbsp;' : esc(l.text)}${sn}</div>`
           })
           .join('')
-        return `<section class="page">${num}${rows}</section>`
+        const latest = latestRevision(pageRevs)
+        const head = latest ? `<div class="rev">${esc(revisionHeading(latest, script.revision?.dates))}</div>` : ''
+        return `<section class="page">${head}${num}${rows}</section>`
       })
       .join('')
     scriptPart = title + body
@@ -216,8 +230,9 @@ body { font: 12pt/12pt 'Courier Prime', 'Courier New', Courier, monospace }
 .page { position: relative; width: ${sheet.width}in; height: ${sheet.height}in; box-sizing: border-box; padding-top: 1in; overflow: hidden;
         page-break-after: always; break-after: page }
 .l { position: relative; height: 12pt; white-space: pre; overflow: visible }
-.sn { position: absolute; top: 0 }
+.sn, .rv { position: absolute; top: 0 }
 .num { position: absolute; top: 0.5in; right: 1in }
+.rev { position: absolute; top: 0.5in; right: 1.5in }
 .title { padding-top: 3.5in; text-align: center }
 .t-main { font-weight: 700; font-size: 12pt; margin-bottom: 36pt }
 .t-by { margin-bottom: 12pt }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { beatLinks, sendBeats, storyOrder, unsent } from '../src/shared/beats'
+import { beatLinks, outlineInsertAt, scenesByBeat, sendBeats, storyOrder, unsent } from '../src/shared/beats'
 import { parseScriptFile, serialize } from '../src/shared/scriptfile'
 import type { Block, Board } from '../src/shared/types'
 
@@ -86,5 +86,57 @@ describe('the link is saved in the file', () => {
     )
     expect(s.blocks[0].bid).toBe('b1')
     expect(s.blocks[1].bid).toBeUndefined()
+  })
+})
+
+describe('scenes grouped by beat', () => {
+  const blocksOf = (groups: ReturnType<typeof scenesByBeat>): number[][] => groups.map((g) => g.scenes.map((s) => s.block))
+
+  it('no beats: one group "Sem beat" with every scene', () => {
+    expect(scenesByBeat([h('INT. A - DIA'), a('x'), h('INT. B - DIA')], { lanes: [], beats: [] })).toEqual([
+      {
+        beatId: null,
+        title: 'Sem beat',
+        scenes: [
+          { block: 0, scene: 1, heading: 'INT. A - DIA', synopsis: '' },
+          { block: 2, scene: 2, heading: 'INT. B - DIA', synopsis: '' }
+        ]
+      }
+    ])
+  })
+
+  it('scenes before the first beat go to "Sem beat", then each beat takes the scenes after it', () => {
+    const g = scenesByBeat([h('INT. A - DIA'), h('INT. B - DIA', 'b1'), h('INT. C - DIA'), h('INT. D - DIA', 'b3')], board)
+    expect(g.map((x) => x.beatId)).toEqual([null, 'b1', 'b3'])
+    expect(g.map((x) => x.title)).toEqual(['Sem beat', 'Chegada', 'Encontro'])
+    expect(blocksOf(g)).toEqual([[0], [1, 2], [3]])
+  })
+
+  it('a second heading with the same bid is just another scene of the current group', () => {
+    const g = scenesByBeat([h('X', 'b1'), h('Y', 'b3'), h('Z', 'b1')], board)
+    expect(g.map((x) => x.beatId)).toEqual(['b1', 'b3'])
+    expect(blocksOf(g)).toEqual([[0], [1, 2]])
+  })
+
+  it('a bid whose beat was deleted does not open a group', () => {
+    const g = scenesByBeat([h('X', 'b1'), h('Y', 'gone')], board)
+    expect(g.map((x) => x.beatId)).toEqual(['b1'])
+    expect(blocksOf(g)).toEqual([[0, 1]])
+  })
+
+  it('synopsis comes from syn', () => {
+    expect(scenesByBeat([{ ...h('X', 'b1'), syn: 'Ela chega.' }], board)[0].scenes[0].synopsis).toBe('Ela chega.')
+  })
+
+  it('no scene headings: no groups', () => {
+    expect(scenesByBeat([a('x')], board)).toEqual([])
+  })
+
+  it("outlineInsertAt is right after the last block of the group's last scene", () => {
+    const bs = [h('A', 'b1'), a('1'), h('B'), a('2'), h('C', 'b3'), a('3')]
+    expect(outlineInsertAt(bs, board, 'b1')).toBe(4)
+    expect(outlineInsertAt(bs, board, 'b3')).toBe(6)
+    expect(outlineInsertAt(bs, board, 'b2')).toBe(-1)
+    expect(outlineInsertAt([h('A'), h('B', 'b1')], board, null)).toBe(1)
   })
 })

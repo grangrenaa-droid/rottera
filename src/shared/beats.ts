@@ -101,3 +101,50 @@ export function unsent(board: Board, blocks: Block[]): Beat[] {
   const links = beatLinks(blocks, board)
   return storyOrder(board).filter((b) => !links.has(b.id))
 }
+
+/** One scene in the outline column of the board. */
+export interface OutlineScene {
+  /** index of the scene heading in the block list */
+  block: number
+  /** 1-based position among the scene headings */
+  scene: number
+  heading: string
+  synopsis: string
+}
+
+/** The scenes of one beat, or of none ("Sem beat") before the first beat. */
+export interface OutlineGroup {
+  beatId: string | null
+  title: string
+  scenes: OutlineScene[]
+}
+
+/**
+ * Scenes in script order, grouped by beat. The first heading carrying a board beat's `bid` opens that beat's group
+ * (the same rule as beatLinks); the scenes after it belong to it until the next group opens. Scenes before the
+ * first group go to { beatId: null, title: 'Sem beat' }.
+ */
+export function scenesByBeat(blocks: Block[], board: Board): OutlineGroup[] {
+  const links = beatLinks(blocks, board)
+  const opens = new Map<number, string>()
+  for (const l of links.values()) opens.set(l.block, l.beatId)
+  const titles = new Map(board.beats.map((b) => [b.id, b.title]))
+  const groups: OutlineGroup[] = []
+  let scene = 0
+  blocks.forEach((b, i) => {
+    if (b.kind !== 'scene_heading') return
+    scene++
+    const opened = opens.get(i)
+    if (opened) groups.push({ beatId: opened, title: titles.get(opened) ?? '', scenes: [] })
+    else if (groups.length === 0) groups.push({ beatId: null, title: 'Sem beat', scenes: [] })
+    groups[groups.length - 1].scenes.push({ block: i, scene, heading: b.text.trim(), synopsis: b.syn ?? '' })
+  })
+  return groups
+}
+
+/** Block index right after the last scene of the group (where "+ cena neste beat" goes); -1 if there is no such group. */
+export function outlineInsertAt(blocks: Block[], board: Board, beatId: string | null): number {
+  const g = scenesByBeat(blocks, board).find((x) => x.beatId === beatId)
+  if (!g || g.scenes.length === 0) return -1
+  return sceneEnd(blocks, g.scenes[g.scenes.length - 1].block)
+}

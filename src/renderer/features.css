@@ -121,6 +121,30 @@ label.stack { font-weight: 600; font-size: 12px; color: var(--color-text-muted);
 .lanes.single .lane-head input { flex: 0 1 280px; }
 .beat-actions { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
 .beat-actions select { height: 28px; max-width: 110px; }
+
+/* ---- escaleta (step outline) next to the board */
+.board-with-outline { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+.board-with-outline > .board { min-width: 0; }
+.board-with-outline.no-outline { grid-template-columns: minmax(0, 1fr); }
+/* with the outline open the act columns share the room left, so three acts still fit side by side */
+.board-with-outline:not(.no-outline) .lanes:not(.single) .lane { flex: 1 1 0; min-width: 220px; grid-template-columns: minmax(0, 1fr); }
+.outline-add { justify-self: start; }
+.outline {
+  position: sticky; top: 0; max-height: calc(100vh - 190px); overflow: auto; display: grid; gap: 12px; align-content: start;
+  background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 12px;
+}
+.outline h2 { margin: 0; font-size: 16px; }
+.outline-group { display: grid; gap: 8px; }
+.outline-group h3 { margin: 0; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--color-text-muted); border-bottom: 1px solid var(--color-border); padding-bottom: 2px; }
+.outline-scene { display: grid; gap: 4px; }
+.outline-head { display: flex; gap: 6px; align-items: center; }
+.outline-num { min-width: 2ch; text-align: right; font-weight: 600; font-size: 12px; color: var(--color-text-muted); }
+.outline-head textarea { flex: 1; min-width: 0; min-height: 0; font-weight: 600; text-transform: uppercase; }
+.outline textarea { field-sizing: content; min-height: 52px; resize: none; }
+@media (max-width: 1100px) {
+  .board-with-outline { grid-template-columns: 1fr; }
+  .outline { position: static; max-height: none; }
+}
 .add-beat { justify-self: start; }
 
 /* ---- reports */
@@ -159,7 +183,7 @@ dialog h3 { font-size: 14px; margin: 16px 0 0; }
 #theme-select { width: 170px; text-overflow: ellipsis; }
 
 /* ---- character sheets and presentation */
-.chars { display: grid; grid-template-columns: 220px minmax(260px, 1fr) minmax(260px, 1fr); gap: 16px; align-items: start; }
+.chars { display: grid; grid-template-columns: 300px minmax(260px, 1fr) minmax(260px, 1fr); gap: 16px; align-items: start; }
 .chars-list, .chars-form, .chars-card {
   background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 12px;
 }
@@ -176,6 +200,8 @@ dialog h3 { font-size: 14px; margin: 16px 0 0; }
 .chars-field { display: grid; gap: 4px; }
 .chars-field label { font-weight: 600; font-size: 12px; }
 .chars-field input, .chars-field textarea { width: 100%; }
+/* the box grows with the text instead of scrolling inside (same as the Beat Board cards) */
+.chars-field textarea { field-sizing: content; min-height: 78px; resize: none; }
 .chars-image { display: grid; gap: 8px; }
 .chars-photo {
   width: 140px; height: 180px; display: grid; place-items: center; overflow: hidden;

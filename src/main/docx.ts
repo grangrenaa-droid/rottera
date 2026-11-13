@@ -145,7 +145,25 @@ ${styles}
 const run = (text: string): string => `<w:r><w:t xml:space="preserve">${xml(text)}</w:t></w:r>`
 const para = (style: string, inner: string, extraPPr = ''): string => `<w:p><w:pPr><w:pStyle w:val="${style}"/>${extraPPr}</w:pPr>${inner}</w:p>`
 
+/** Where revision asterisks go, from the page's left edge: the column of the PDF's right-hand scene numbers. */
+const MARK_COLUMN = 7.65
+
+/**
+ * Revision mode: an asterisk in the right margin beside a changed paragraph. It is a framed paragraph, which floats
+ * at the height of the paragraph that follows it and takes no room in the text, so the pages break as before.
+ * `before` is the blank space above that paragraph (in lines), so the mark sits on its first line of text.
+ */
+function revMark(before: number): string {
+  return `<w:p><w:pPr><w:framePr w:w="${Math.round(0.2 * TW)}" w:hSpace="0" w:wrap="around" w:vAnchor="text" w:hAnchor="page" w:x="${Math.round(MARK_COLUMN * TW)}" w:y="${before * 240}"/><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="exact"/></w:pPr>${run('*')}</w:p>`
+}
+
 function blockPara(b: Block, number: string | undefined, next?: Block): string {
+  const p = blockParaText(b, number, next)
+  // a numbered heading carries the mark after its right-hand number (see blockParaText)
+  return b.rev && !(b.kind === 'scene_heading' && number) ? revMark(SPEC[b.kind].before) + p : p
+}
+
+function blockParaText(b: Block, number: string | undefined, next?: Block): string {
   const style = STYLE[b.kind].id
   // a speech in parts (line, parenthetical, line) stays together, so its second part never opens a page without the name
   if (b.kind === 'dialogue' && next && !next.dual && (next.kind === 'parenthetical' || next.kind === 'dialogue')) {
@@ -156,7 +174,7 @@ function blockPara(b: Block, number: string | undefined, next?: Block): string {
     const right = Math.round((TEXT_RIGHT - TEXT_LEFT + 0.5) * TW)
     return para(
       style,
-      `${run(number)}<w:r><w:tab/></w:r>${run(b.text)}<w:r><w:tab/></w:r>${run(number)}`,
+      `${run(number)}<w:r><w:tab/></w:r>${run(b.text)}<w:r><w:tab/></w:r>${run(b.rev ? `${number} *` : number)}`,
       `<w:tabs><w:tab w:val="left" w:pos="0"/><w:tab w:val="right" w:pos="${right}"/></w:tabs><w:ind w:left="0" w:right="-720" w:hanging="720"/>`
     )
   }
@@ -215,7 +233,9 @@ export function toDocx(script: Script): Buffer {
       if (j < blocks.length && blocks[j].dual && blocks[j].kind === 'character') {
         let k = j + 1
         while (k < blocks.length && blocks[k].dual && (blocks[k].kind === 'dialogue' || blocks[k].kind === 'parenthetical')) k++
-        body.push(dualTable(blocks.slice(i, j), blocks.slice(j, k), textWidth))
+        // a change in either speech of a dual dialogue marks the pair
+        const changed = blocks.slice(i, k).some((x) => x.rev)
+        body.push((changed ? revMark(SPEC.character.before) : '') + dualTable(blocks.slice(i, j), blocks.slice(j, k), textWidth))
         i = k - 1
         continue
       }

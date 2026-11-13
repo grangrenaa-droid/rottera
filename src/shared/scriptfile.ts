@@ -102,7 +102,16 @@ export function parseScriptFile(raw: string): Script {
       times: strs(src.extras.times)
     }
   }
-  if (src.revision) script.revision = { mode: src.revision.mode === true, color: String(src.revision.color ?? 'azul') }
+  if (src.revision) {
+    script.revision = { mode: src.revision.mode === true, color: String(src.revision.color ?? 'azul') }
+    const dates = src.revision.dates
+    if (dates && typeof dates === 'object') {
+      const ok = Object.entries(dates as Record<string, unknown>).filter(
+        (e): e is [string, string] => typeof e[1] === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(e[1])
+      )
+      if (ok.length) script.revision.dates = Object.fromEntries(ok)
+    }
+  }
   if (src.paper === 'a4' || src.paper === 'letter') script.paper = src.paper
   if (src.scenesLocked === true) script.scenesLocked = true
   if (src.numberScenes === true) script.numberScenes = true
