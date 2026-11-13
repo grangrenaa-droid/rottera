@@ -1,4 +1,7 @@
-import type { Beat, Block, Board, CharacterSheet, Kind, LightMap, Note, NoteColor, Script, Storyboard, TitlePage } from '../shared/types'
+import type { Beat, Block, Board, CharacterSheet, Kind, LightMap, Mic, MicType, Note, NoteColor, Script, Sound, Storyboard, TitlePage } from '../shared/types'
+import { LABEL_MAX, MIC_DEFS, MIC_TYPES, cleanSound, emptySheet, emptySound, newMic, soundLineOf } from '../shared/sound'
+import { soundAutoLines } from '../shared/equipment'
+import { sceneInfo } from '../shared/production'
 import { NOTE_COLORS, NOTE_MAX } from '../shared/notes'
 import { SYNOPSIS_MAX, cleanSynopsis } from '../shared/scriptfile'
 import { FIELDS, characterKey, listCharacters, newSheet, presentationOf } from '../shared/characters'
@@ -26,6 +29,8 @@ export interface BridgeContext {
   setBoard(b: Board): void
   setStoryboard(sb: Storyboard): void
   setLightMaps(maps: LightMap[]): void
+  /** The Som window's data (microphones, sheets, ambiences, music, equipment). */
+  setSound(sound: Sound): void
   setCharacters(sheets: CharacterSheet[]): void
   setNotes(notes: Note[]): void
   save(): Promise<void>
@@ -444,6 +449,107 @@ export function createBridgeHandler(ctx: BridgeContext): (method: string, params
           })),
           load: electricLoad(mapWatts(m))
         }))
+      }
+
+      case 'get_sound': {
+        const s = ctx.script()
+        const sound = s.sound ?? emptySound()
+        const maps = s.lightMaps ?? []
+        const scenes = sceneInfo(s)
+        const numberOf = (sid: string | undefined): string => (sid ? scenes.find((x) => x.id === sid)?.number ?? '' : '')
+        const auto = soundAutoLines(sound)
+        return {
+          plans: sound.plans.map((p) => {
+            const m = p.mapId ? maps.find((x) => x.id === p.mapId) : undefined
+            return {
+              id: p.id,
+              map: m ? m.name : null,
+              scene: m ? numberOf(m.sid) || m.scene : numberOf(p.sid),
+              width: p.width,
+              height: p.height,
+              notes: p.notes,
+              mics: p.mics.map((mic) => {
+                const actor = mic.actorId && m ? m.items.find((i) => i.id === mic.actorId && i.type === 'actor') : undefined
+                return { ...mic, typeLabel: MIC_DEFS[mic.type].label, ...(actor ? { actor: actor.label } : {}) }
+              })
+            }
+          }),
+          sheets: scenes
+            .filter((sc) => sc.id && sound.sheets[sc.id])
+            .map((sc) => ({ scene: sc.number, heading: sc.heading, ...sound.sheets[sc.id as string], line: soundLineOf(sound, maps, sc.id as string) })),
+          ambiences: sound.ambiences,
+          music: sound.music.map((x) => ({ ...x, scenes: x.scenes.map(numberOf).filter(Boolean) })),
+          equipment: [
+            ...auto.map((l) => ({ name: l.name, qty: l.qty, fromPlans: true, ...(sound.equipState[l.key] ?? { rental: '', out: false, back: false, notes: '' }) })),
+            ...sound.equipment.map((e) => ({ ...e, fromPlans: false }))
+          ]
+        }
+      }
+
+      case 'add_mic': {
+        const s = ctx.script()
+        const maps = s.lightMaps ?? []
+        const map = maps[findMap(maps, p.map)]
+        const type = p.type as MicType
+        if (!MIC_TYPES.includes(type)) fail(`Tipo de microfone desconhecido. Use: ${MIC_TYPES.join(', ')}.`)
+        const sound = s.sound ?? emptySound()
+        let plan = sound.plans.find((x) => x.mapId === map.id)
+        const made = !plan
+        if (!plan) {
+          plan = { id: newId('snd'), mapId: map.id, scene: map.scene, width: map.width, height: map.height, mics: [], notes: '' }
+          if (map.sid) plan.sid = map.sid
+        }
+        let actorId: string | undefined
+        if (typeof p.actor === 'string' && p.actor.trim()) {
+          const q = p.actor.trim().toLowerCase()
+          const a = map.items.find((i) => i.type === 'actor' && (i.id === p.actor || i.label.toLowerCase() === q))
+          if (!a) fail(`Ator não encontrado no mapa "${map.name}".`)
+          actorId = a.id
+        }
+        const at = actorId ? map.items.find((i) => i.id === actorId) : undefined
+        const num = (v: unknown, lo: number, hi: number): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : undefined)
+        const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim().slice(0, LABEL_MAX) : undefined)
+        const mic: Mic = {
+          ...newMic(type, num(p.x, 0, plan.width) ?? at?.x ?? plan.width / 2, num(p.y, 0, plan.height) ?? at?.y ?? plan.height / 2),
+          rotation: Math.round(((num(p.rotation, -3600, 3600) ?? 0) % 360 + 360) % 360),
+          label: str(p.label) ?? (type === 'recorder' ? 'Gravador' : `${type === 'lavalier' ? 'Lapela' : 'Mic'} ${plan.mics.length + 1}`)
+        }
+        const model = str(p.model)
+        if (model) mic.model = model
+        const channel = num(p.channel, 1, 16)
+        if (channel !== undefined) mic.channel = Math.round(channel)
+        if (p.wireless === true) mic.wireless = true
+        const height = num(p.height, 0, 20)
+        if (height !== undefined) mic.height = height
+        const range = num(p.range, 0.1, 30)
+        if (range !== undefined) mic.range = range
+        const operator = str(p.operator)
+        if (operator) mic.operator = operator
+        if (actorId && type === 'lavalier') mic.actorId = actorId
+        const next = { ...plan, mics: [...plan.mics, mic] }
+        ctx.setSound({ ...sound, plans: made ? [...sound.plans, next] : sound.plans.map((x) => (x.id === next.id ? next : x)) })
+        ctx.touched('sound')
+        return { id: mic.id, label: mic.label, plan: next.id, map: map.name }
+      }
+
+      case 'set_sound_sheet': {
+        const s = ctx.script()
+        const scenes = sceneInfo(s)
+        const ref = typeof p.scene === 'number' ? String(p.scene) : typeof p.scene === 'string' ? p.scene.trim() : ''
+        const sc = scenes.find((x) => x.number === ref)
+        if (!sc) fail('Cena não encontrada (use o número da cena, como em get_outline).')
+        const sid = sc.id ?? ctx.handle()?.anchorBlocks([sc.index])[0] ?? null
+        if (!sid) fail('Não foi possível marcar a cena. Tente de novo.')
+        const sound = ctx.script().sound ?? emptySound()
+        const cur: Record<string, unknown> = { ...(sound.sheets[sid] ?? emptySheet()) }
+        for (const k of ['capture', 'voices', 'risks', 'otherRisk', 'requests', 'roomTone', 'roomToneSeconds', 'effects', 'playback', 'notes']) {
+          if (p[k] !== undefined) cur[k] = p[k]
+        }
+        const cleaned = cleanSound({ ...sound, sheets: { ...sound.sheets, [sid]: cur } })
+        if (!cleaned) fail('Ficha inválida.')
+        ctx.setSound(cleaned)
+        ctx.touched('sound')
+        return { scene: sc.number, ...cleaned.sheets[sid], line: soundLineOf(cleaned, ctx.script().lightMaps ?? [], sid) }
       }
 
       case 'get_lighting_gear': {

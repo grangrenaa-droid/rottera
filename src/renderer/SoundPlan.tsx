@@ -25,6 +25,8 @@ interface Drag {
   kind: 'move' | 'rotate'
   from: { x: number; y: number }
   start: { x: number; y: number }
+  /** Whether this drag already left a step to undo (only once it really changes something). */
+  recorded: boolean
 }
 
 const clamp = (n: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, n))
@@ -156,6 +158,8 @@ export function SoundPlanView(p: Props): JSX.Element {
     const r = el.getBoundingClientRect()
     return { x: ((e.clientX - r.left) / r.width) * plan.width, y: ((e.clientY - r.top) / r.height) * plan.height }
   }
+  /** A lavalier clipped to an actor of the map is drawn at the actor and does not move by itself. */
+  const clipped = (m: Mic): boolean => m.type === 'lavalier' && !!m.actorId && !!map?.items.some((i) => i.id === m.actorId)
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>): void => {
     const t = e.target as Element
     surface.current?.focus()
@@ -169,9 +173,7 @@ export function SoundPlanView(p: Props): JSX.Element {
       return
     }
     setSelId(m.id)
-    setPast((h) => [...h.slice(-49), soundRef.current])
-    setFuture([])
-    drag.current = { id: m.id, kind: rot ? 'rotate' : 'move', from: at, start: { x: m.x, y: m.y } }
+    drag.current = { id: m.id, kind: rot ? 'rotate' : 'move', from: at, start: { x: m.x, y: m.y }, recorded: false }
     e.currentTarget.setPointerCapture(e.pointerId)
   }
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>): void => {
@@ -180,21 +182,31 @@ export function SoundPlanView(p: Props): JSX.Element {
     if (!d || !at || !plan) return
     const m = plan.mics.find((x) => x.id === d.id)
     if (!m) return
+    // a click without a real change is not a step to undo; the first change records the step
+    const apply = (patch: Partial<Mic>): void => {
+      if ((Object.keys(patch) as (keyof Mic)[]).every((k) => patch[k] === m[k])) return
+      if (!d.recorded) {
+        d.recorded = true
+        setPast((h) => [...h.slice(-49), soundRef.current])
+        setFuture([])
+      }
+      patchMic(m.id, patch, false)
+    }
     if (d.kind === 'rotate') {
       let a = (Math.atan2(at.x - m.x, -(at.y - m.y)) * 180) / Math.PI
       if (!e.shiftKey) a = Math.round(a / 15) * 15
-      patchMic(m.id, { rotation: ((Math.round(a) % 360) + 360) % 360 }, false)
+      apply({ rotation: ((Math.round(a) % 360) + 360) % 360 })
       return
     }
     // a lavalier clipped to an actor goes where the actor goes
-    if (m.type === 'lavalier' && m.actorId && map?.items.some((i) => i.id === m.actorId)) return
+    if (clipped(m)) return
     let x = d.start.x + (at.x - d.from.x)
     let y = d.start.y + (at.y - d.from.y)
     if (!e.shiftKey) {
       x = round(x, 0.1)
       y = round(y, 0.1)
     }
-    patchMic(m.id, { x: Math.round(clamp(x, 0, plan.width) * 100) / 100, y: Math.round(clamp(y, 0, plan.height) * 100) / 100 }, false)
+    apply({ x: Math.round(clamp(x, 0, plan.width) * 100) / 100, y: Math.round(clamp(y, 0, plan.height) * 100) / 100 })
   }
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>): void => {
     if (!drag.current) return
@@ -223,6 +235,7 @@ export function SoundPlanView(p: Props): JSX.Element {
     const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0
     if (!dx && !dy) return
     e.preventDefault()
+    if (clipped(selected)) return
     patchMic(selected.id, { x: Math.round(clamp(selected.x + dx, 0, plan.width) * 100) / 100, y: Math.round(clamp(selected.y + dy, 0, plan.height) * 100) / 100 })
   }
 

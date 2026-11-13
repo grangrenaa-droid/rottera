@@ -298,6 +298,26 @@ check('sixteen reports: Filmagem, then music and sound equipment last', all.leng
   check('a frame keeps its shot', sb.frames[fr.index].shot === 'Close' && sb.frames[fr.index].lens === 85, JSON.stringify(sb.frames[fr.index]))
 }
 
+// sound: microphones on a light map, a scene's sound sheet, and reading it all back
+{
+  const o = await tool('get_outline')
+  const lm = await tool('create_lightmap', { name: 'Som', scene: o[0].number, width: 6, height: 4 })
+  await tool('add_light_item', { map: lm.index, type: 'actor', x: 2, y: 3, label: 'Luísa' })
+  const mic = await tool('add_mic', { map: lm.index, type: 'shotgun', x: 3, y: 1, channel: 1, model: 'MKH 416', operator: 'Rafa' })
+  const lav = await tool('add_mic', { map: 'Som', type: 'lavalier', actor: 'Luísa', channel: 2 })
+  check('add_mic puts microphones on the light map', typeof mic.id === 'string' && typeof lav.id === 'string', JSON.stringify([mic, lav]))
+  const bad = await tool('add_mic', { map: lm.index, type: 'banana' })
+  check('add_mic refuses an unknown type', typeof bad.error === 'string', JSON.stringify(bad))
+  const sheet = await tool('set_sound_sheet', { scene: o[0].number, capture: 'direct', risks: ['Trânsito'], roomTone: true, requests: 'Desligar a geladeira' })
+  check('set_sound_sheet writes the sheet', /Som direto/.test(sheet.line ?? ''), JSON.stringify(sheet))
+  const s = await tool('get_sound')
+  const plan = (s.plans ?? []).find((p) => p.map === 'Som')
+  check('get_sound reads the plan and its microphones', plan && plan.mics.length === 2 && plan.mics.some((m) => m.actor === 'Luísa'), JSON.stringify(s.plans))
+  check('get_sound reads the scene sheet', (s.sheets ?? []).some((x) => x.scene === o[0].number && x.requests === 'Desligar a geladeira'), JSON.stringify(s.sheets))
+  check('get_sound lists the equipment from the plans', (s.equipment ?? []).some((e) => e.name === 'Shotgun · MKH 416'), JSON.stringify(s.equipment))
+  check('the microphones do not change the light map', (await tool('get_lightmaps'))[lm.index].items.length === 1)
+}
+
 // synopsis: the AI writes one and it shows under the heading
 {
   const o = await tool('get_outline')

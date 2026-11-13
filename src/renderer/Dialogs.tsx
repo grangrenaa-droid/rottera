@@ -156,12 +156,14 @@ export function CopyFolderDialog(props: { onChanged(info: CopyFolderInfo): void;
   )
 }
 
-export type ExportChoice = 'pdf' | 'docx' | 'html' | 'fdx' | 'fountain' | 'storyboard-pdf' | 'lightmap-pdf' | 'characters-pdf'
+export type ExportChoice = 'pdf' | 'docx' | 'html' | 'fdx' | 'fountain' | 'storyboard-pdf' | 'lightmap-pdf' | 'sound-pdf' | 'characters-pdf'
 
 /** Everything the app can export, in one place (Mais → Exportar…). */
 export function ExportDialog(props: {
   frames: number
   maps: number
+  /** The sound plans (Som window). */
+  soundPlans: number
   onExport(format: ExportChoice): void
   onPreview(): void
   onReports(): void
@@ -195,6 +197,7 @@ export function ExportDialog(props: {
       <ul className="templates">
         {item('Storyboard', 'Os quadros, na ordem do roteiro.', go('storyboard-pdf'), props.frames === 0, props.frames === 0 ? 'nenhum quadro ainda' : '')}
         {item('Mapas de luz', 'A planta de cada set, com câmeras, luzes e notas.', go('lightmap-pdf'), props.maps === 0, props.maps === 0 ? 'nenhum mapa ainda' : '')}
+        {item('Plantas de som', 'Os microfones de cada set sobre a planta de luz, com a tabela de canais.', go('sound-pdf'), props.soundPlans === 0, props.soundPlans === 0 ? 'nenhuma planta ainda' : '')}
         {item('Fichas de personagem', 'A apresentação de cada personagem que tem ficha.', go('characters-pdf'))}
       </ul>
       <h3 className="export-group">Relatórios e produção</h3>

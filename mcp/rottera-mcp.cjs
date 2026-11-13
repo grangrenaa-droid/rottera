@@ -344,6 +344,58 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: {} }
   },
   {
+    name: 'get_sound',
+    description:
+      'Lê a pré-produção de som (janela Som): as plantas de som (microfones sobre cada mapa de luz, ou plantas só de som, com tipo, posição em metros, rotação, modelo, canal, sem fio, altura, alcance, quem segura a vara e o ator de cada lapela), a ficha de som de cada cena (captação, quem fala, riscos, o que pedir no set, room tone, efeitos, playback, observações, e a linha que vai para a ordem do dia), os ambientes a gravar por locação, as músicas (com as cenas pelos números atuais) e a lista de equipamento de som.',
+    inputSchema: { type: 'object', properties: {} }
+  },
+  {
+    name: 'add_mic',
+    description:
+      'Coloca um microfone na planta de som de um mapa de luz (o mapa de luz não muda). Tipos: cardioid, supercardioid, shotgun, omni, figure8, lavalier, recorder. Posição x,y em metros (padrão: o centro, ou o ator da lapela); rotação 0 aponta para o fundo do set. A lapela pode ser presa a um ator do mapa (actor = nome do ator) e passa a acompanhá-lo.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        map: { description: 'Índice, id ou nome do mapa de luz. Padrão: o primeiro.' },
+        type: { type: 'string', enum: ['cardioid', 'supercardioid', 'shotgun', 'omni', 'figure8', 'lavalier', 'recorder'] },
+        x: { type: 'number' },
+        y: { type: 'number' },
+        rotation: { type: 'number' },
+        label: { type: 'string' },
+        model: { type: 'string', description: 'Ex.: MKH 416.' },
+        channel: { type: 'integer', minimum: 1, maximum: 16 },
+        wireless: { type: 'boolean' },
+        height: { type: 'number', description: 'Altura em metros.' },
+        range: { type: 'number', description: 'Alcance em metros.' },
+        operator: { type: 'string', description: 'Quem segura a vara (shotgun, supercardioide).' },
+        actor: { type: 'string', description: 'Lapela: o ator do mapa em que ela fica presa.' }
+      },
+      required: ['type']
+    }
+  },
+  {
+    name: 'set_sound_sheet',
+    description:
+      'Preenche a ficha de som de uma cena (só os campos dados mudam). capture: direct (som direto), adr (dublagem), playback, mos (sem som). voices: { "NOME": "lapela" | "vara" | "ambos" }. risks: entre Trânsito, Avião, Obra, Vento, Chuva, Eco, Gerador, Ar-condicionado, Geladeira. A ficha fica presa à cena, mesmo que ela mude de número.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        scene: { type: 'string', description: 'Número da cena, como em get_outline.' },
+        capture: { type: 'string', enum: ['direct', 'adr', 'playback', 'mos'] },
+        voices: { type: 'object', additionalProperties: { type: 'string', enum: ['lapela', 'vara', 'ambos'] } },
+        risks: { type: 'array', items: { type: 'string' } },
+        otherRisk: { type: 'string' },
+        requests: { type: 'string', description: 'O que pedir no set.' },
+        roomTone: { type: 'boolean' },
+        roomToneSeconds: { type: 'integer', minimum: 1, maximum: 3600 },
+        effects: { type: 'string' },
+        playback: { type: 'string' },
+        notes: { type: 'string' }
+      },
+      required: ['scene']
+    }
+  },
+  {
     name: 'get_lighting_gear',
     description: 'Lista de equipamento de luz de todos os mapas: quantos aparelhos de cada tipo e potência, em quais mapas, e a carga total (W e corrente em 127 V e 220 V). Útil para o pedido à locadora e o gerador.',
     inputSchema: { type: 'object', properties: {} }

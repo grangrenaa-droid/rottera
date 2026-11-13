@@ -20,6 +20,7 @@ function fake(initial: Block[]): { handler: (m: string, p?: unknown) => Promise<
     setBoard: () => undefined,
     setStoryboard: () => undefined,
     setLightMaps: () => undefined,
+    setSound: () => undefined,
     setCharacters: () => undefined,
     setNotes: () => undefined,
     save: async () => undefined,

@@ -209,6 +209,49 @@ test.describe('F27 the Som window', () => {
     expect(saved.sound.plans).toEqual([])
   })
 
+  test('F27-E3 a click on a microphone without dragging is not a step to undo', async ({ app, page, dialogs, userData }) => {
+    await open(page, dialogs)
+    expect((await rpc(userData, 'create_lightmap', { name: 'Cozinha', scene: '1', width: 6, height: 4 })).ok).toBe(true)
+    await menu(app, 'view-sound')
+    await page.locator('.snd-plans button', { hasText: 'Cozinha' }).click()
+    await page.getByRole('button', { name: 'Pôr Shotgun' }).click()
+    await page.locator('.snd-surface [data-mic] circle[fill="#fff"]').click()
+    await page.getByRole('button', { name: 'Desfazer' }).click()
+    // the one step was putting the microphone
+    await expect(page.locator('.snd-surface [data-mic]')).toHaveCount(0)
+  })
+
+  test('F27-E4 a lavalier clipped to an actor does not move with the arrow keys', async ({ app, page, dialogs, userData }) => {
+    const dir = await open(page, dialogs)
+    expect((await rpc(userData, 'create_lightmap', { name: 'Cozinha', scene: '1', width: 6, height: 4 })).ok).toBe(true)
+    expect((await rpc(userData, 'add_light_item', { map: 'Cozinha', type: 'actor', x: 2, y: 3, label: 'Luísa' })).ok).toBe(true)
+    await menu(app, 'view-sound')
+    await page.locator('.snd-plans button', { hasText: 'Cozinha' }).click()
+    await page.getByRole('button', { name: 'Pôr Lapela' }).click()
+    await page.getByLabel('Preso em').selectOption({ label: 'Luísa' })
+    const before = (await saveAs(app, page, dialogs, join(dir, 'a.rottera'))).sound.plans[0].mics[0]
+    await page.locator('.snd-surface').focus()
+    await page.keyboard.press('ArrowRight')
+    await page.keyboard.press('ArrowDown')
+    const after = (await saveAs(app, page, dialogs, join(dir, 'b.rottera'))).sound.plans[0].mics[0]
+    expect([after.x, after.y]).toEqual([before.x, before.y])
+  })
+
+  test('F27-H5 the sound plans are in the Export dialog', async ({ app, page, dialogs, userData }) => {
+    await open(page, dialogs)
+    await page.getByRole('button', { name: 'Mais' }).click()
+    await page.getByRole('button', { name: 'Exportar…', exact: true }).click()
+    await expect(page.getByRole('button', { name: /Plantas de som/ })).toBeDisabled()
+    await page.keyboard.press('Escape')
+    expect((await rpc(userData, 'create_lightmap', { name: 'Cozinha', scene: '1', width: 6, height: 4 })).ok).toBe(true)
+    await menu(app, 'view-sound')
+    await page.locator('.snd-plans button', { hasText: 'Cozinha' }).click()
+    await page.getByRole('button', { name: 'Pôr Shotgun' }).click()
+    await page.getByRole('button', { name: 'Mais' }).click()
+    await page.getByRole('button', { name: 'Exportar…', exact: true }).click()
+    await expect(page.getByRole('button', { name: /Plantas de som/ })).toBeEnabled()
+  })
+
   test('F27-A1 the four tabs of the Som window have no serious accessibility violations, light and dark', async ({ app, page, dialogs, userData }) => {
     await open(page, dialogs)
     expect((await rpc(userData, 'create_lightmap', { name: 'Cozinha', scene: '1', width: 6, height: 4 })).ok).toBe(true)

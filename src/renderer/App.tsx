@@ -1132,6 +1132,7 @@ export function App(): JSX.Element {
         setBoard,
         setStoryboard,
         setLightMaps,
+        setSound: putSound,
         setCharacters,
         setNotes,
         save: () => saveNow(false),
@@ -1140,7 +1141,7 @@ export function App(): JSX.Element {
           window.setTimeout(() => setMessage((m) => (m?.startsWith('A IA editou') ? null : m)), 4000)
         }
       }),
-    [setBoard, setStoryboard, setLightMaps, setCharacters, setNotes, saveNow, scheduleAutosave]
+    [setBoard, setStoryboard, setLightMaps, putSound, setCharacters, setNotes, saveNow, scheduleAutosave]
   )
 
   useEffect(() => {
@@ -1769,6 +1770,7 @@ export function App(): JSX.Element {
         <ExportDialog
           frames={storyboard.frames.length}
           maps={lightMaps.length}
+          soundPlans={sound?.plans.length ?? 0}
           onExport={(f) => {
             setDialog(null)
             void doExport(f)
