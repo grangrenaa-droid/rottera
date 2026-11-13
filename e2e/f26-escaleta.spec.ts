@@ -171,6 +171,20 @@ test.describe('F26 escaleta no Beat Board', () => {
     expect(spill).toEqual([])
   })
 
+  test('F26-E7 estrutura de 4 colunas com a escaleta aberta: os cartões não transbordam das colunas', async ({ page }) => {
+    await boardWithScenes(page)
+    await expect(page.locator('.lane')).toHaveCount(4)
+    const spill = await page.evaluate(() =>
+      [...document.querySelectorAll('.lane')].flatMap((lane) => {
+        const right = lane.getBoundingClientRect().right
+        return [...lane.querySelectorAll('.beat, .beat *, .lane-head button')]
+          .filter((el) => el.getBoundingClientRect().right > right + 1)
+          .map((el) => `${el.tagName.toLowerCase()}.${el.className}`)
+      })
+    )
+    expect(spill).toEqual([])
+  })
+
   test('F26-E5 cabeçalho longo aparece inteiro na escaleta', async ({ page }) => {
     await boardWithScenes(page)
     const field = outline(page).getByRole('textbox', { name: 'Cabeçalho da cena 1', exact: true })
