@@ -263,6 +263,8 @@ export interface Script {
   notes?: Note[]
   production?: Production
   tableRead?: TableRead
+  /** The Som window: microphone plans, sound sheets, ambiences, music and equipment. */
+  sound?: Sound
 }
 
 /** A voice installed on the computer (its name) and a pitch, 1 = as it is. */
@@ -326,6 +328,117 @@ export interface ShootDay {
 export interface Production {
   items: BreakdownItem[]
   days: ShootDay[]
+}
+
+// ---------------------------------------------------------------- sound (the Som window)
+
+export type MicType = 'cardioid' | 'supercardioid' | 'shotgun' | 'omni' | 'figure8' | 'lavalier' | 'recorder'
+
+/** A microphone (or the recorder) on a sound plan. Position in metres from the top-left corner, 0° = up, clockwise. */
+export interface Mic {
+  id: string
+  type: MicType
+  x: number
+  y: number
+  rotation: number
+  label: string
+  model?: string
+  /** Recorder channel, 1–16. */
+  channel?: number
+  wireless?: boolean
+  /** Metres from the floor. */
+  height?: number
+  /** How far it picks up, in metres. */
+  range?: number
+  /** Who holds the boom (shotgun, supercardioid). */
+  operator?: string
+  /** A lavalier: the actor (light map item) it is clipped to; it is drawn where the actor is. */
+  actorId?: string
+}
+
+/**
+ * The microphones of a set: over a light map (`mapId`), drawn faint below them and never changed, or on a plan of
+ * its own for a scene with no light map. `width`/`height`/`sid`/`scene` follow the light map while it exists.
+ */
+export interface SoundPlan {
+  id: string
+  mapId?: string
+  sid?: string
+  scene: string
+  width: number
+  height: number
+  mics: Mic[]
+  notes: string
+}
+
+export type Capture = 'direct' | 'adr' | 'playback' | 'mos'
+
+/** The sound sheet of a scene. */
+export interface SoundSheet {
+  capture?: Capture
+  /** Who speaks (character name, as the cues write it) and how they are miked. */
+  voices: Record<string, 'lapela' | 'vara' | 'ambos'>
+  risks: string[]
+  otherRisk: string
+  requests: string
+  roomTone: boolean
+  roomToneSeconds: number
+  effects: string
+  playback: string
+  notes: string
+}
+
+/** Something to record at a location besides the dialogue. */
+export interface Ambience {
+  id: string
+  /** The location as the plan groups scenes ("CINE ESTRELA - CABINE"). */
+  location: string
+  what: string
+  duration: string
+  notes: string
+  recorded: boolean
+}
+
+export interface Song {
+  id: string
+  title: string
+  author: string
+  /** Scene ids. */
+  scenes: string[]
+  kind: 'diegetic' | 'score'
+  /** "mm:ss". */
+  duration: string
+  rights: 'licensed' | 'pending' | 'original' | 'public'
+  notes: string
+}
+
+/** A line of an equipment list typed by hand. */
+export interface EquipItem {
+  id: string
+  name: string
+  qty: number
+  rental: string
+  out: boolean
+  back: boolean
+  notes: string
+}
+
+/** What is written on a line that comes by itself (from the microphones on the plans), by its key. */
+export interface EquipState {
+  rental: string
+  out: boolean
+  back: boolean
+  notes: string
+}
+
+export interface Sound {
+  plans: SoundPlan[]
+  /** By scene id. */
+  sheets: Record<string, SoundSheet>
+  ambiences: Ambience[]
+  music: Song[]
+  equipment: EquipItem[]
+  equipState: Record<string, EquipState>
 }
 
 export interface ScriptFile {

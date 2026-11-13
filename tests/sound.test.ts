@@ -1,0 +1,100 @@
+import { describe, expect, it } from 'vitest'
+import { cleanSound, emptySheet, emptySound, micsOfScene, newMic, plansOfScene, reconcileSound } from '../src/shared/sound'
+import { parseScriptFile, serialize } from '../src/shared/scriptfile'
+import type { LightMap, Script, Sound } from '../src/shared/types'
+
+const map = (over: Partial<LightMap> = {}): LightMap => ({
+  id: 'lm1',
+  name: 'Cabine',
+  scene: '1',
+  sid: 's1',
+  width: 6,
+  height: 4,
+  items: [{ id: 'a1', type: 'actor', x: 2, y: 3, rotation: 0, label: 'Luísa' }],
+  notes: '',
+  includeInPdf: true,
+  ...over
+})
+
+function sound(): Sound {
+  const s = emptySound()
+  s.plans.push({
+    id: 'p1',
+    mapId: 'lm1',
+    sid: 's1',
+    scene: '1',
+    width: 6,
+    height: 4,
+    notes: '',
+    mics: [
+      { ...newMic('shotgun', 5, 3), id: 'm1', label: 'Mic 1', channel: 1, model: 'MKH 416' },
+      { ...newMic('lavalier', 1, 1), id: 'm2', label: 'Lapela 2', channel: 2, actorId: 'a1' }
+    ]
+  })
+  s.sheets.s1 = { ...emptySheet(), capture: 'direct', risks: ['Trânsito'] }
+  s.ambiences.push({ id: 'amb1', location: 'CINE ESTRELA', what: 'Ruído do projetor', duration: '1 min', notes: '', recorded: false })
+  s.music.push({ id: 'mu1', title: 'Valsa', author: 'Ana', scenes: ['s1'], kind: 'diegetic', duration: '02:30', rights: 'pending', notes: '' })
+  s.equipment.push({ id: 'eq1', name: 'Fone', qty: 2, rental: 'Locadora X', out: false, back: false, notes: '' })
+  s.equipState['shotgun|MKH 416'] = { rental: 'Locadora X', out: true, back: false, notes: '' }
+  return s
+}
+
+describe('sound data in the file', () => {
+  it('a valid sound comes back as it was', () => {
+    const s = sound()
+    expect(cleanSound(JSON.parse(JSON.stringify(s)))).toEqual(s)
+  })
+
+  it('nothing usable is no sound at all', () => {
+    expect(cleanSound(undefined)).toBeUndefined()
+    expect(cleanSound(42)).toBeUndefined()
+    expect(cleanSound({ plans: 'x' })).toBeUndefined()
+  })
+
+  it('keeps what is valid and drops or bounds the rest', () => {
+    const raw = JSON.parse(JSON.stringify(sound()))
+    raw.plans[0].mics.push({ id: 'm3', type: 'laser', x: 1, y: 1, rotation: 0, label: 'x' })
+    raw.plans[0].mics[0].channel = 99
+    raw.plans[0].mics[0].label = 'x'.repeat(5000)
+    raw.sheets.s1.notes = 'y'.repeat(50000)
+    const c = cleanSound(raw)!
+    expect(c.plans[0].mics.map((m) => m.id)).toEqual(['m1', 'm2'])
+    expect(c.plans[0].mics[0].channel).toBe(16)
+    expect(c.plans[0].mics[0].label.length).toBeLessThanOrEqual(80)
+    expect(c.sheets.s1.notes.length).toBeLessThanOrEqual(2000)
+  })
+
+  it('travels in the .rottera file', () => {
+    const script: Script = { titlePage: { title: '', author: '', contact: '' }, blocks: [{ kind: 'scene_heading', text: 'INT. CABINE - NOITE', nid: 's1' }], sound: sound() }
+    expect(parseScriptFile(serialize(script)).sound).toEqual(sound())
+  })
+})
+
+describe('sound plans follow the light maps without changing them', () => {
+  it('a plan on a light map takes its size and scene', () => {
+    const s = reconcileSound({ ...sound(), plans: [{ ...sound().plans[0], width: 1, height: 1, sid: undefined, scene: '' }] }, [map()])
+    expect(s.plans[0]).toMatchObject({ mapId: 'lm1', width: 6, height: 4, sid: 's1', scene: '1' })
+  })
+
+  it('a deleted light map leaves a sound-only plan of the same size', () => {
+    const s = reconcileSound(sound(), [])
+    expect(s.plans[0].mapId).toBeUndefined()
+    expect(s.plans[0]).toMatchObject({ width: 6, height: 4, sid: 's1' })
+    expect(s.plans[0].mics).toHaveLength(2)
+  })
+
+  it('a smaller light map keeps every microphone inside the plan', () => {
+    const s = reconcileSound(sound(), [map({ width: 3, height: 2 })])
+    expect(s.plans[0].mics[0]).toMatchObject({ x: 3, y: 2 })
+  })
+
+  it('finds the plans and microphones of a scene, with the actor a lavalier is clipped to', () => {
+    expect(plansOfScene(sound(), [map()], 's1').map((p) => p.id)).toEqual(['p1'])
+    expect(micsOfScene(sound(), [map()], 's1').map((x) => [x.mic.id, x.actor])).toEqual([
+      ['m1', ''],
+      ['m2', 'Luísa']
+    ])
+    // the actor was deleted in the light map: the lavalier names no one
+    expect(micsOfScene(sound(), [map({ items: [] })], 's1')[1].actor).toBe('')
+  })
+})
