@@ -293,3 +293,34 @@ export function musicReport(scenes: SceneInfo[], sound: Sound): Report {
     })
   }
 }
+
+/** A microphone, short, for the day sheet: "Mic 1 (Shotgun, canal 1)", "Lapela 2 em Luísa (canal 2)". */
+function micShort(mic: Mic, actor: string): string {
+  const type = MIC_DEFS[mic.type].label
+  const name = mic.label.trim() || type
+  const more = [name.toLowerCase().startsWith(type.toLowerCase()) ? '' : type, mic.channel ? `canal ${mic.channel}` : ''].filter(Boolean).join(', ')
+  return `${name}${mic.type === 'lavalier' && actor ? ` em ${actor}` : ''}${more ? ` (${more})` : ''}`
+}
+
+/** The scene's sound on one line of the day sheet: capture, microphones, risks, room tone ('' when there is nothing). */
+export function soundLineOf(sound: Sound, maps: LightMap[], sceneId: string): string {
+  const s = sound.sheets[sceneId] ?? emptySheet()
+  const risks = [...s.risks, s.otherRisk.trim()].filter(Boolean)
+  return [
+    CAPTURES.find((c) => c.id === s.capture)?.label ?? '',
+    micsOfScene(sound, maps, sceneId)
+      .map((m) => micShort(m.mic, m.actor))
+      .join(', '),
+    risks.length ? `Riscos: ${risks.join(', ')}` : '',
+    s.roomTone ? `Room tone ${s.roomToneSeconds} s` : ''
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
+
+/** What is still to be recorded at the locations of a day: "CINE ESTRELA - CABINE: ruído do projetor; …". */
+export function ambiencesToRecord(sound: Sound, locations: string[]): string {
+  return locations
+    .flatMap((loc) => sound.ambiences.filter((a) => a.location === loc && !a.recorded && a.what.trim()).map((a) => `${loc}: ${a.what.trim()}`))
+    .join('; ')
+}

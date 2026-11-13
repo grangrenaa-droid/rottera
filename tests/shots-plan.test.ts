@@ -229,3 +229,18 @@ describe('the day sheet', () => {
     ])
   })
 })
+
+describe('sound on the day sheet', () => {
+  it('a scene carries its sound line and the heading the ambiences to record that day', () => {
+    const { p: p0, a } = planned()
+    const p = scheduleScene(p0, 's2', a)
+    const located: string[][] = []
+    const c = dayReport(p.days[0], 0, scenes, p, shots, {
+      line: (id) => (id === 's1' ? 'Som direto' : ''),
+      ambiences: (locs) => (located.push(locs), 'COZINHA: geladeira')
+    }).printed!.callsheet!
+    expect(c.scenes.map((s) => s.sound)).toEqual(['Som direto', ''])
+    expect(c.ambiences).toBe('COZINHA: geladeira')
+    expect(located).toEqual([['COZINHA', 'RUA']])
+  })
+})

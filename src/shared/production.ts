@@ -740,7 +740,13 @@ export function scheduleReport(scenes: SceneInfo[], p: Production, shots: Map<st
 }
 
 /** One day as the crew reads it on set: its place in the plan, start, locations and notes, then a block per scene. */
-function callSheetOf(day: ShootDay, n: number, total: number, list: PlanEntry[], p: Production): CallSheet {
+/** What the Som window adds to a day sheet: each scene's sound line, and the ambiences to record at the day's locations. */
+export interface DaySound {
+  line(sceneId: string): string
+  ambiences(locations: string[]): string
+}
+
+function callSheetOf(day: ShootDay, n: number, total: number, list: PlanEntry[], p: Production, sound?: DaySound): CallSheet {
   const locations: string[] = []
   for (const e of list) {
     const l = e.scene.location || e.scene.heading
@@ -753,6 +759,7 @@ function callSheetOf(day: ShootDay, n: number, total: number, list: PlanEntry[],
     locations,
     summary: daySummary(list),
     notes: day.notes.trim(),
+    ...(sound ? { ambiences: sound.ambiences([...new Set(list.map((e) => locationKey(e.scene)))]) } : {}),
     scenes: list.map((e) => ({
       time: e.time,
       number: e.scene.number,
@@ -764,13 +771,14 @@ function callSheetOf(day: ShootDay, n: number, total: number, list: PlanEntry[],
       synopsis: e.scene.synopsis,
       shots: shotsByTime(e.shots).map((x) => ({ time: x.time, code: x.code, text: x.text })),
       cast: e.scene.cast.join(', '),
-      elements: elementsText(p, e.scene.id)
+      elements: elementsText(p, e.scene.id),
+      ...(sound ? { sound: e.scene.id ? sound.line(e.scene.id) : '' } : {})
     }))
   }
 }
 
 /** The call sheet for one day: a table for the screen and the CSV, a day sheet for the PDF. */
-export function dayReport(day: ShootDay, n: number, scenes: SceneInfo[], p: Production, shots: Map<string, ShotInfo[]> = new Map()): Report {
+export function dayReport(day: ShootDay, n: number, scenes: SceneInfo[], p: Production, shots: Map<string, ShotInfo[]> = new Map(), sound?: DaySound): Report {
   const withShots = hasShots(shots)
   const columns = withShots ? PLAN_COLUMNS_SHOTS : PLAN_COLUMNS
   const list = dayEntries(day, scenes, p, shots)
@@ -782,7 +790,7 @@ export function dayReport(day: ShootDay, n: number, scenes: SceneInfo[], p: Prod
     title: `Ordem do dia · ${dayLabel(day, n)}`,
     columns,
     rows,
-    printed: { columns, sections: [daySection(day, n, scenes, p, shots, 'Cenas do dia')], callsheet: callSheetOf(day, n, p.days.length, list, p) }
+    printed: { columns, sections: [daySection(day, n, scenes, p, shots, 'Cenas do dia')], callsheet: callSheetOf(day, n, p.days.length, list, p, sound) }
   }
 }
 

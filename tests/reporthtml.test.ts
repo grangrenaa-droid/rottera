@@ -192,3 +192,19 @@ describe('several tables on one page', () => {
     expect(h).not.toContain('Sem dados neste relatório')
   })
 })
+
+describe('sound on the day sheet', () => {
+  it('prints "Som:" only in the scene that has it, and the ambiences to record in the heading', () => {
+    const scene = { time: '', number: '1', part: false, intExt: 'INT.', location: 'COZINHA', dn: 'D', pages: '1/8', synopsis: '', shots: [], cast: '', elements: '' }
+    const html = buildReportHtml({
+      ...base,
+      callsheet: {
+        day: 'Dia 1', dayOf: 'Dia 1 de 1', start: '', locations: ['COZINHA'], summary: '', notes: '', ambiences: 'COZINHA: geladeira',
+        scenes: [{ ...scene, sound: 'Som direto · <b>' }, { ...scene, number: '2' }]
+      }
+    })
+    expect(html.match(/<b>Som:<\/b>/g)).toHaveLength(1)
+    expect(html).toContain('<p class="cs-row"><b>Som:</b> Som direto · &lt;b&gt;</p>')
+    expect(html).toContain('<p class="cs-locs"><b>Gravar ambientes:</b> COZINHA: geladeira</p>')
+  })
+})

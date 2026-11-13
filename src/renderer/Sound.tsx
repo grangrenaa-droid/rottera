@@ -37,6 +37,11 @@ export function SoundView(p: Props): JSX.Element {
           {tabBtn('library', 'Ambientes e músicas')}
           {tabBtn('equipment', 'Equipamento')}
         </div>
+        {tab === 'plan' && p.sound.plans.length > 0 && (
+          <button className="btn secondary" onClick={p.onExportPlans}>
+            Exportar plantas (PDF)
+          </button>
+        )}
       </div>
       {tab === 'plan' && <SoundPlanView sound={p.sound} maps={p.maps} scenes={p.scenes} sceneId={p.sceneId} onChange={p.onChange} />}
       {tab === 'sheets' && (

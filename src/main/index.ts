@@ -286,7 +286,7 @@ function registerIpc(): void {
     'file:export',
     async (_e, a: { format: ExportFormat; script: Script; suggestedName: string }): Promise<string | null> => {
       if (!win) return null
-      const pdf = a.format === 'pdf' || a.format === 'storyboard-pdf' || a.format === 'lightmap-pdf' || a.format === 'characters-pdf'
+      const pdf = a.format === 'pdf' || a.format === 'storyboard-pdf' || a.format === 'lightmap-pdf' || a.format === 'sound-pdf' || a.format === 'characters-pdf'
       const ext = pdf ? 'pdf' : a.format
       const label = ext === 'docx' ? 'Documento do Word' : ext === 'html' ? 'Página da web' : ext.toUpperCase()
       const r = await dialog.showSaveDialog(win, {
@@ -299,7 +299,7 @@ function registerIpc(): void {
       else if (a.format === 'docx') writeFileSync(r.filePath, toDocx(a.script))
       else if (a.format === 'html') writeFileSync(r.filePath, scriptPageHtml(a.script), 'utf8')
       else if (a.format === 'fountain') writeFileSync(r.filePath, toFountain(a.script), 'utf8')
-      else writeFileSync(r.filePath, await renderPdf(a.script, { storyboardOnly: a.format === 'storyboard-pdf', lightMapsOnly: a.format === 'lightmap-pdf', charactersOnly: a.format === 'characters-pdf' }))
+      else writeFileSync(r.filePath, await renderPdf(a.script, { storyboardOnly: a.format === 'storyboard-pdf', lightMapsOnly: a.format === 'lightmap-pdf', soundOnly: a.format === 'sound-pdf', charactersOnly: a.format === 'characters-pdf' }))
       return r.filePath
     }
   )

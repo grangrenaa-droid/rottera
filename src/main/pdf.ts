@@ -6,6 +6,8 @@ import { CAMERA_COLUMNS, LIGHT_COLUMNS, lightMapSvg, loadText, mapWatts, sheetRo
 import { listCharacters, presentationOf } from '../shared/characters'
 import { sceneNumbers } from '../shared/scenes'
 import { latestRevision, revisionHeading } from '../shared/revisions'
+import { soundPlanSvg } from '../shared/soundsvg'
+import { MIC_DEFS } from '../shared/sound'
 
 /** Where revision asterisks go, in inches from the page's left edge: the column of the right-hand scene numbers. */
 const MARK_COLUMN = 7.65
@@ -53,6 +55,48 @@ export interface PdfOptions {
   lightMapsOnly?: boolean
   /** Print only the character presentations. */
   charactersOnly?: boolean
+  /** Print only the sound plans (Som window). */
+  soundOnly?: boolean
+}
+
+/** The sound plans: one page each, the light map faint below the microphones, then the microphones in a table. */
+function soundPlansHtml(script: Script): string {
+  const plans = script.sound?.plans ?? []
+  const maps = script.lightMaps ?? []
+  const title = script.titlePage.title.trim() || 'Roteiro'
+  const cols = ['Nome', 'Tipo', 'Modelo', 'Canal', 'Sem fio', 'Altura', 'Operador / ator']
+  return plans
+    .map((p, i) => {
+      const map = p.mapId ? maps.find((m) => m.id === p.mapId) ?? null : null
+      const name = map ? map.name : 'Planta só de som'
+      const where = p.scene ? ` · Cena ${esc(p.scene)}` : ''
+      const who = (mic: (typeof p.mics)[number]): string => {
+        if (mic.type === 'lavalier') return (mic.actorId && map?.items.find((x) => x.id === mic.actorId && x.type === 'actor')?.label) || ''
+        return mic.operator ?? ''
+      }
+      const rows = p.mics.map((m) => [
+        m.label || MIC_DEFS[m.type].label,
+        MIC_DEFS[m.type].label,
+        m.model ?? '',
+        m.channel ? String(m.channel) : '',
+        m.wireless ? 'Sim' : '',
+        m.height !== undefined ? `${String(m.height).replace('.', ',')} m` : '',
+        who(m)
+      ])
+      const table = rows.length
+        ? `<table class="lm-table"><thead><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join('')}</tr></thead>` +
+          `<tbody>${rows.map((r) => `<tr>${r.map((v) => `<td>${esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table>`
+        : '<p>Nenhum microfone nesta planta.</p>'
+      return (
+        `<section class="page lm snd">` +
+        `<div class="sb-head"><b>PLANTA DE SOM</b> — ${esc(name.toUpperCase())}${where}<span>${i + 1} / ${plans.length}</span></div>` +
+        `<div class="lm-sub">${esc(title.toUpperCase())} · ${p.width} m × ${p.height} m</div>` +
+        `<div class="lm-svg snd-svg">${soundPlanSvg(p, map)}<div class="lm-tech-in">${table}</div>` +
+        `${p.notes.trim() ? `<div class="lm-notes"><b>Notas</b>${esc(p.notes)}</div>` : ''}</div>` +
+        `</section>`
+      )
+    })
+    .join('')
 }
 
 function storyboardHtml(script: Script): string {
@@ -165,7 +209,7 @@ export function buildPdfHtml(script: Script, opts: PdfOptions = {}): string {
   const paper = script.paper ?? 'letter'
   const sheet = PAPER[paper]
   const hasTitle = tp.title.trim() !== ''
-  const only = opts.storyboardOnly === true || opts.lightMapsOnly === true || opts.charactersOnly === true
+  const only = opts.storyboardOnly === true || opts.lightMapsOnly === true || opts.charactersOnly === true || opts.soundOnly === true
   const wantStoryboard =
     opts.storyboardOnly === true || (!only && script.storyboard?.includeInPdf === true && !opts.scriptOnly)
   const wantMaps = opts.lightMapsOnly === true || (!only && !opts.scriptOnly)
@@ -219,6 +263,7 @@ export function buildPdfHtml(script: Script, opts: PdfOptions = {}): string {
   const chPart = wantCharacters ? charactersHtml(script, opts.charactersOnly !== true) : ''
   const sbPart = wantStoryboard ? storyboardHtml(script) : ''
   const lmPart = wantMaps ? lightMapsHtml(script, opts.lightMapsOnly !== true) : ''
+  const sndPart = opts.soundOnly === true ? soundPlansHtml(script) : ''
 
   return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(tp.title || 'Roteiro')}</title>
 <style>
@@ -260,6 +305,9 @@ body { font: 12pt/12pt 'Courier Prime', 'Courier New', Courier, monospace }
 .lm-table th { border-bottom: 1pt solid #111; font-size: 7.5pt; text-transform: uppercase; white-space: nowrap }
 .lm-table td.nw { white-space: nowrap }
 .lm-load { margin: 6pt 0 0 }
+/* a sound plan: the drawing a little shorter, so its table fits below it */
+.snd-svg svg { max-height: 5.2in; width: auto; max-width: 100% }
+.lm-tech-in { margin-top: 10pt; font-size: 8.5pt; line-height: 11pt }
 .ch { padding-top: 0 }
 .ch-body { position: absolute; left: ${SB_PAGE.left}in; right: ${SB_PAGE.right}in; top: 0.95in; bottom: 0.7in; overflow: hidden; font-size: 10pt; line-height: 13pt }
 .ch-top { display: flex; gap: 0.25in; align-items: flex-start; margin-bottom: 14pt }
@@ -270,7 +318,7 @@ body { font: 12pt/12pt 'Courier Prime', 'Courier New', Courier, monospace }
 .ch-body p { margin: 0 }
 .ch-body ul { margin: 2pt 0 0; padding-left: 14pt }
 ${watermarkCss(script, sheet)}
-</style></head><body>${scriptPart}${chPart}${sbPart}${lmPart}</body></html>`
+</style></head><body>${scriptPart}${chPart}${sbPart}${lmPart}${sndPart}</body></html>`
 }
 
 /**

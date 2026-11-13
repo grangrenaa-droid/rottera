@@ -13,7 +13,7 @@ export interface RecentItem {
   openedAt: string
 }
 
-export type ExportFormat = 'pdf' | 'storyboard-pdf' | 'lightmap-pdf' | 'characters-pdf' | 'fdx' | 'fountain' | 'docx' | 'html'
+export type ExportFormat = 'pdf' | 'storyboard-pdf' | 'lightmap-pdf' | 'sound-pdf' | 'characters-pdf' | 'fdx' | 'fountain' | 'docx' | 'html'
 
 /** The second folder every saved script is also copied to (OneDrive, a pen drive...). */
 export interface CopyFolderInfo {

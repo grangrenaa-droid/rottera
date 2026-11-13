@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { cleanSound, emptySheet, emptySound, micsOfScene, newMic, plansOfScene, reconcileSound, sheetsReport, musicReport, ambiencesReport } from '../src/shared/sound'
+import { cleanSound, emptySheet, emptySound, micsOfScene, newMic, plansOfScene, reconcileSound, sheetsReport, musicReport, ambiencesReport, soundLineOf, ambiencesToRecord } from '../src/shared/sound'
+import { buildPdfHtml } from '../src/main/pdf'
 import type { SceneInfo } from '../src/shared/production'
 import { parseScriptFile, serialize } from '../src/shared/scriptfile'
 import type { LightMap, Script, Sound } from '../src/shared/types'
@@ -149,5 +150,42 @@ describe('ambiences and music as reports', () => {
     const r = ambiencesReport(sound())
     expect(r.columns).toEqual(['Locação', 'O que gravar', 'Duração', 'Gravado', 'Observações'])
     expect(r.rows).toEqual([['CINE ESTRELA', 'Ruído do projetor', '1 min', 'Não', '—']])
+  })
+})
+
+describe('sound on the day sheet', () => {
+  it('one line per scene: capture, microphones, risks and room tone', () => {
+    const s = sound()
+    s.sheets.s1 = { ...emptySheet(), capture: 'direct', risks: ['Trânsito', 'Geladeira'], roomTone: true, roomToneSeconds: 30 }
+    expect(soundLineOf(s, [map()], 's1')).toBe('Som direto · Mic 1 (Shotgun, canal 1), Lapela 2 em Luísa (canal 2) · Riscos: Trânsito, Geladeira · Room tone 30 s')
+  })
+
+  it('nothing written and no microphones: no line', () => {
+    expect(soundLineOf(emptySound(), [map()], 's1')).toBe('')
+  })
+
+  it('the ambiences still to record at the locations of the day', () => {
+    const s = emptySound()
+    const amb = (location: string, what: string, recorded = false) => ({ id: what, location, what, duration: '', notes: '', recorded })
+    s.ambiences.push(
+      amb('CINE ESTRELA - CABINE', 'ruído do projetor'),
+      amb('CINE ESTRELA - SALA', 'plateia vazia'),
+      amb('CINE ESTRELA - SALA', 'ar-condicionado', true),
+      amb('RUA', 'chuva')
+    )
+    expect(ambiencesToRecord(s, ['CINE ESTRELA - CABINE', 'CINE ESTRELA - SALA'])).toBe('CINE ESTRELA - CABINE: ruído do projetor; CINE ESTRELA - SALA: plateia vazia')
+  })
+})
+
+describe('the sound plans in the PDF', () => {
+  it('one page per plan, with the light map faint below and the microphones in a table', () => {
+    const script: Script = { titlePage: { title: 'Chuva', author: '', contact: '' }, blocks: [], lightMaps: [map()], sound: sound() }
+    script.sound!.plans.push({ id: 'p2', sid: 's9', scene: '9', width: 4, height: 3, notes: '', mics: [] })
+    const html = buildPdfHtml(script, { soundOnly: true })
+    expect(html.match(/class="page lm snd"/g)).toHaveLength(2)
+    expect(html).toContain('PLANTA DE SOM')
+    expect(html).toContain('Shotgun')
+    expect(html).toContain('MKH 416')
+    expect(html).not.toContain('MAPA DE LUZ')
   })
 })

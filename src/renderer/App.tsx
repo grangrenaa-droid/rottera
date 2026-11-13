@@ -32,7 +32,7 @@ import { StoryboardView } from './Storyboard'
 import { ScriptPage } from './ScriptPage'
 import { LightMapView } from './LightMap'
 import { SoundView } from './Sound'
-import { emptySound, reconcileSound } from '../shared/sound'
+import { ambiencesToRecord, emptySound, reconcileSound, soundLineOf } from '../shared/sound'
 import { ReportsView } from './Reports'
 import { ConnectDialog, CopyFolderDialog, DiagnosticsDialog, ExportDialog, ManualDialog, SmartTypeDialog, TemplatesDialog, TitleDialog, VersionsDialog, WatermarkDialog } from './Dialogs'
 import { createBridgeHandler } from './bridgeHandler'
@@ -780,7 +780,7 @@ export function App(): JSX.Element {
   }, [])
 
   const doExport = useCallback(
-    async (format: 'pdf' | 'storyboard-pdf' | 'lightmap-pdf' | 'characters-pdf' | 'fdx' | 'fountain' | 'docx' | 'html') => {
+    async (format: 'pdf' | 'storyboard-pdf' | 'lightmap-pdf' | 'sound-pdf' | 'characters-pdf' | 'fdx' | 'fountain' | 'docx' | 'html') => {
       try {
         const s = { ...scriptRef.current, blocks: handle.current?.getBlocks() ?? scriptRef.current.blocks }
         const p = await window.api.exportFile(format, s, s.titlePage.title || baseName(pathRef.current) || 'Sem título')
@@ -1265,6 +1265,10 @@ export function App(): JSX.Element {
         .catch(() => flash('Não foi possível exportar o relatório.')),
     [flash]
   )
+  const daySound = useMemo(
+    () => (sound ? { line: (id: string) => soundLineOf(sound, lightMaps, id), ambiences: (locs: string[]) => ambiencesToRecord(sound, locs) } : undefined),
+    [sound, lightMaps]
+  )
   const exportCsv = useCallback(
     (name: string, csv: string) => void window.api.exportText(name, 'csv', csv).then((p) => p && flash(`Exportado: ${p.split(/[\\/]/).pop()}`)),
     [flash]
@@ -1668,7 +1672,7 @@ export function App(): JSX.Element {
               scenes={shootingScenes}
               sceneId={sceneIdOf}
               onChange={putSound}
-              onExportPlans={() => undefined}
+              onExportPlans={() => void doExport('sound-pdf')}
               onExportPdf={exportReportPdf}
               onExportCsv={exportCsv}
             />
@@ -1688,6 +1692,7 @@ export function App(): JSX.Element {
               onOpenMap={openMap}
               onExportPdf={exportReportPdf}
               onExportCsv={exportCsv}
+              daySound={daySound}
             />
           )}
           {panel === 'reports' && (

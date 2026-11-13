@@ -36,6 +36,8 @@ export interface CallSheetScene {
   shots: CallSheetShot[]
   cast: string
   elements: string
+  /** The scene's sound, on one line (Som window), or nothing. */
+  sound?: string
 }
 
 /** A shooting day as the crew reads it on set (ordem do dia): a heading, then a block per scene. */
@@ -49,6 +51,8 @@ export interface CallSheet {
   /** "3 cenas · 1 2/8 pág.". */
   summary: string
   notes: string
+  /** The ambiences still to record at the day's locations (Som window), or nothing. */
+  ambiences?: string
   scenes: CallSheetScene[]
 }
 
@@ -127,6 +131,7 @@ function cleanCallSheet(c: CallSheet): CallSheet {
     locations: Array.isArray(x.locations) ? x.locations.slice(0, 100).map((l) => str(l, 200)) : [],
     summary: str(x.summary, 200),
     notes: str(x.notes, MAX_CELL),
+    ambiences: str(x.ambiences, MAX_CELL),
     scenes: list(x.scenes, 2000, (s) => ({
       time: str(s.time, 20),
       number: str(s.number, 40),
@@ -138,7 +143,8 @@ function cleanCallSheet(c: CallSheet): CallSheet {
       synopsis: str(s.synopsis, MAX_CELL),
       shots: list(s.shots, 500, (h) => ({ time: str(h.time, 20), code: str(h.code, 40), text: str(h.text, 400) })),
       cast: str(s.cast, MAX_CELL),
-      elements: str(s.elements, MAX_CELL)
+      elements: str(s.elements, MAX_CELL),
+      sound: str(s.sound, MAX_CELL)
     }))
   }
 }
@@ -150,6 +156,7 @@ function callSheetHtml(c: CallSheet, scriptTitle: string): string {
     `<header class="cs-head"><p class="cs-film">${esc(scriptTitle || 'Sem título')}</p><h1>Ordem do dia · ${esc(c.day)}</h1>` +
     `<p class="cs-meta">${meta.map((m) => `<span>${esc(m)}</span>`).join('')}</p>` +
     (c.locations.length ? `<p class="cs-locs"><b>Locações:</b> ${esc(c.locations.join(' · '))}</p>` : '') +
+    (c.ambiences?.trim() ? `<p class="cs-locs"><b>Gravar ambientes:</b> ${esc(c.ambiences)}</p>` : '') +
     (c.notes.trim() ? `<div class="cs-notes">${esc(c.notes)}</div>` : '') +
     `</header>`
   const scene = (s: CallSheetScene): string => {
@@ -165,6 +172,7 @@ function callSheetHtml(c: CallSheet, scriptTitle: string): string {
       shots +
       (s.cast.trim() ? `<p class="cs-row"><b>Elenco:</b> ${esc(s.cast)}</p>` : '') +
       (s.elements.trim() ? `<p class="cs-row"><b>Elementos:</b> ${esc(s.elements)}</p>` : '') +
+      (s.sound?.trim() ? `<p class="cs-row"><b>Som:</b> ${esc(s.sound)}</p>` : '') +
       `</section>`
     )
   }
