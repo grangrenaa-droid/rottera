@@ -6,6 +6,7 @@ import { PAPER, paginate, type Pagination } from './paginate'
 import { parseHeading } from './smarttype'
 import { sceneNumbers } from './scenes'
 import { newId } from './structures'
+import { cleanPlace, isDate } from './sun'
 
 /** The breakdown categories, in the order a breakdown sheet lists them. */
 export const CATEGORIES: { id: BreakdownCategory; label: string }[] = [
@@ -182,6 +183,9 @@ export function cleanProduction(raw: unknown): Production {
         }
         if (Object.keys(all).length) day.shotTimes = all
       }
+      if (isDate(x.date)) day.date = x.date
+      const place = cleanPlace(x.place)
+      if (place) day.place = place
       raw.push(day)
     }
     // a scene is shot on one day, unless the days it is on each say which of its shots they have
@@ -238,8 +242,18 @@ export function removeDay(p: Production, dayId: string): Production {
   return { ...p, days: p.days.filter((d) => d.id !== dayId) }
 }
 
-export function updateDay(p: Production, dayId: string, patch: Partial<Pick<ShootDay, 'label' | 'notes'>>): Production {
-  return { ...p, days: p.days.map((d) => (d.id === dayId ? { ...d, ...patch } : d)) }
+export function updateDay(p: Production, dayId: string, patch: Partial<Pick<ShootDay, 'label' | 'notes' | 'date' | 'place'>>): Production {
+  return {
+    ...p,
+    days: p.days.map((d) => {
+      if (d.id !== dayId) return d
+      const next = { ...d, ...patch }
+      // cleared fields leave the day, so the file stays as it was
+      if (!next.date) delete next.date
+      if (!next.place) delete next.place
+      return next
+    })
+  }
 }
 
 export function moveDay(p: Production, dayId: string, dir: 1 | -1): Production {

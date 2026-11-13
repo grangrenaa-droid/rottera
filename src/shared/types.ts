@@ -265,6 +265,8 @@ export interface Script {
   tableRead?: TableRead
   /** The Som window: microphone plans, sound sheets, ambiences, music and equipment. */
   sound?: Sound
+  /** The Luz window: a light sheet per scene, the place for the sun, the light equipment list. */
+  lighting?: Lighting
 }
 
 /** A voice installed on the computer (its name) and a pitch, 1 = as it is. */
@@ -323,6 +325,10 @@ export interface ShootDay {
   shots?: Record<string, string[]>
   /** When each shot is filmed that day ("09:00"): by scene id, then by storyboard frame id. */
   shotTimes?: Record<string, Record<string, string>>
+  /** The calendar date of the day ("2026-11-20"), for the sun. */
+  date?: string
+  /** Where the day is shot, when not where the film is (Luz → Sol e horários). */
+  place?: Place
 }
 
 export interface Production {
@@ -437,6 +443,43 @@ export interface Sound {
   sheets: Record<string, SoundSheet>
   ambiences: Ambience[]
   music: Song[]
+  equipment: EquipItem[]
+  equipState: Record<string, EquipState>
+}
+
+/** A place on Earth for the sun: a city of the list or typed coordinates, with its UTC offset in hours. */
+export interface Place {
+  name: string
+  lat: number
+  lon: number
+  tz: number
+}
+
+/** The light of a scene: the why behind the light map. */
+export interface LightSheet {
+  quality?: 'hard' | 'soft'
+  contrast?: 'high' | 'low'
+  /** The overall colour, in words ("quente, âmbar"). */
+  color: string
+  /** Where the light of the story comes from (LIGHT_SOURCES). */
+  sources: string[]
+  otherSource: string
+  /** Time of day in the story and continuity ("fim de tarde; continua da cena 4"). */
+  story: string
+  effects: string[]
+  otherEffect: string
+  /** Power and generator. */
+  power: string
+  /** Time to rig, in minutes. */
+  setupMinutes?: number
+  notes: string
+}
+
+export interface Lighting {
+  /** By scene id. */
+  sheets: Record<string, LightSheet>
+  /** Where the film is shot, for the sun. */
+  place?: Place
   equipment: EquipItem[]
   equipState: Record<string, EquipState>
 }
