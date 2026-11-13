@@ -143,6 +143,66 @@ test.describe('F28 the Luz window', () => {
     await expect(place.getByRole('alert')).toHaveCount(0)
     await expect(place).toContainText('-22.971, -43.182')
   })
-})
+  test('F28-H4 the light equipment lists the lights of the maps and the load of the heaviest map', async ({ app, page, dialogs, userData }) => {
+    await open(page, dialogs)
+    expect((await rpc(userData, 'create_lightmap', { name: 'Cozinha', scene: '1', width: 6, height: 4 })).ok).toBe(true)
+    for (const x of [1, 3]) expect((await rpc(userData, 'add_light_item', { map: 'Cozinha', type: 'fresnel', x, y: 1, watts: 2000 })).ok).toBe(true)
+    await menu(app, 'view-lightmap')
+    await tab(page, 'Equipamento').click()
+    const row = page.locator('tr', { hasText: 'Fresnel 2.000 W' })
+    await expect(row).toContainText('da planta')
+    await expect(row.locator('.eq-qty')).toHaveText('2')
+    await expect(page.locator('.equipment-head')).toContainText('Carga do mapa mais pesado: 4.000 W')
+    await page.getByLabel('Fresnel 2.000 W retirado').check()
+  })
 
-export { axeViolations, rpc, setTheme }
+  test('F28-H5 the day sheet has the date and the sun of the day', async ({ app, page, dialogs }) => {
+    await open(page, dialogs)
+    await menu(app, 'view-shooting')
+    await page.getByRole('button', { name: 'Plano de filmagem' }).click()
+    await page.getByRole('button', { name: 'Novo dia' }).click()
+    await page.getByLabel('Dia da cena 1', { exact: true }).selectOption({ label: 'Dia 1' })
+    await menu(app, 'view-lightmap')
+    await tab(page, 'Sol e horários').click()
+    await page.getByLabel('Data do Dia 1').fill('2026-06-21')
+    await page.getByRole('group', { name: 'Lugar do filme' }).getByLabel('Cidade').fill('São Paulo - SP')
+    await expect(page.locator('.light-days tbody tr').first().locator('td').nth(3)).toHaveText(/^06:4\d$/)
+
+    await app.evaluate(({ ipcMain }) => {
+      ipcMain.removeHandler('file:exportReportPdf')
+      ipcMain.handle('file:exportReportPdf', (_e, req) => {
+        ;(globalThis as unknown as { lastReport: unknown }).lastReport = req
+        return null
+      })
+    })
+    await menu(app, 'view-shooting')
+    await page.getByRole('button', { name: 'Plano de filmagem' }).click()
+    await page.getByRole('button', { name: 'Ordem do dia (PDF)' }).click()
+    const sent = async (): Promise<any> => app.evaluate(() => (globalThis as unknown as { lastReport?: unknown }).lastReport ?? null)
+    await expect.poll(sent).not.toBeNull()
+    const c = (await sent()).callsheet
+    expect(c.date).toBe('Domingo, 21/06/2026')
+    expect(c.sun).toMatch(/^nasce 06:4\d · golden hour \d\d:\d\d–\d\d:\d\d · se põe 17:\d\d$/)
+  })
+
+  test('F28-A1 the four tabs of the Luz window have no serious accessibility violations, light and dark', async ({ app, page, dialogs, userData }) => {
+    await open(page, dialogs)
+    expect((await rpc(userData, 'create_lightmap', { name: 'Cozinha', scene: '1', width: 6, height: 4 })).ok).toBe(true)
+    expect((await rpc(userData, 'add_light_item', { map: 'Cozinha', type: 'fresnel', x: 1, y: 1 })).ok).toBe(true)
+    await menu(app, 'view-shooting')
+    await page.getByRole('button', { name: 'Plano de filmagem' }).click()
+    await page.getByRole('button', { name: 'Novo dia' }).click()
+    await menu(app, 'view-lightmap')
+    await tab(page, 'Equipamento').click()
+    await page.getByRole('button', { name: '+ Item' }).click()
+    const found: string[] = []
+    for (const theme of ['light', 'night'] as const) {
+      await setTheme(app, page, theme)
+      for (const t of ['Planta', 'Ficha por cena', 'Sol e horários', 'Equipamento']) {
+        await tab(page, t).click()
+        for (const v of await axeViolations(page)) found.push(`${theme}/${t}: ${v}`)
+      }
+    }
+    expect(found).toEqual([])
+  })
+})

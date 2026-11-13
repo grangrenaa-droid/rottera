@@ -15,6 +15,8 @@ interface Props {
   onChange(items: EquipItem[], state: Record<string, EquipState>): void
   onExportPdf(r: Report): void
   onExportCsv(name: string, csv: string): void
+  /** A line above the table (the light window: the load of the heaviest map). */
+  note?: string
 }
 
 const NO_STATE: EquipState = { rental: '', out: false, back: false, notes: '' }
@@ -48,6 +50,11 @@ export function EquipmentView(p: Props): JSX.Element {
     <div className="equipment">
       <header className="equipment-head">
         <p className="muted">
+          {p.note && (
+            <>
+              <b className="eq-note">{p.note}</b>{' '}
+            </>
+          )}
           {p.auto.length > 0 ? 'As linhas marcadas “da planta” vêm sozinhas dos desenhos; o resto você acrescenta.' : 'Acrescente o que vai ser alugado ou levado para o set.'}
         </p>
         <div className="row">

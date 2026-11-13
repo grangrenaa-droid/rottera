@@ -31,7 +31,7 @@ import { BoardView } from './Board'
 import { StoryboardView } from './Storyboard'
 import { ScriptPage } from './ScriptPage'
 import { LightView } from './Light'
-import { emptyLighting } from '../shared/lighting'
+import { daySun, daySunLine, emptyLighting } from '../shared/lighting'
 import { SoundView } from './Sound'
 import { ambiencesToRecord, emptySound, reconcileSound, soundLineOf } from '../shared/sound'
 import { ReportsView } from './Reports'
@@ -1145,6 +1145,7 @@ export function App(): JSX.Element {
         setStoryboard,
         setLightMaps,
         setSound: putSound,
+        setLighting: putLighting,
         setCharacters,
         setNotes,
         save: () => saveNow(false),
@@ -1153,7 +1154,7 @@ export function App(): JSX.Element {
           window.setTimeout(() => setMessage((m) => (m?.startsWith('A IA editou') ? null : m)), 4000)
         }
       }),
-    [setBoard, setStoryboard, setLightMaps, putSound, setCharacters, setNotes, saveNow, scheduleAutosave]
+    [setBoard, setStoryboard, setLightMaps, putSound, putLighting, setCharacters, setNotes, saveNow, scheduleAutosave]
   )
 
   useEffect(() => {
@@ -1715,6 +1716,10 @@ export function App(): JSX.Element {
               onExportPdf={exportReportPdf}
               onExportCsv={exportCsv}
               daySound={daySound}
+              daySunLine={(d) => {
+                const sun = daySun(d, lighting ?? emptyLighting()).sun
+                return sun ? daySunLine(sun) : ''
+              }}
             />
           )}
           {panel === 'reports' && (

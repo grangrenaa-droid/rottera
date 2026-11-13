@@ -344,6 +344,35 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: {} }
   },
   {
+    name: 'get_lighting',
+    description:
+      'Lê a janela Luz: a ficha de luz de cada cena (qualidade dura/suave, contraste, cor, de onde vem a luz da história, horário e continuidade, efeitos, energia e gerador, tempo de montagem, observações), o lugar do filme, cada dia de filmagem com data, lugar, sol (blue hour, nascer, golden hour, pôr, em hora local) e os avisos de cenas cuja luz não bate com o horário marcado, e a lista de equipamento de luz.',
+    inputSchema: { type: 'object', properties: {} }
+  },
+  {
+    name: 'set_light_sheet',
+    description:
+      'Preenche a ficha de luz de uma cena (só os campos dados mudam). quality: hard ou soft. contrast: high ou low. sources: entre Sol, Janela, Lua, Luz de teto, Abajur, TV ou tela, Fogo ou vela, Poste, Faróis, Letreiro ou neon. effects: entre Pisca, Fogo, TV, Relâmpago, Giroflex, Faróis passando, Lanterna. A ficha fica presa à cena, mesmo que ela mude de número.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        scene: { type: 'string', description: 'Número da cena, como em get_outline.' },
+        quality: { type: 'string', enum: ['hard', 'soft'] },
+        contrast: { type: 'string', enum: ['high', 'low'] },
+        color: { type: 'string' },
+        sources: { type: 'array', items: { type: 'string' } },
+        otherSource: { type: 'string' },
+        story: { type: 'string', description: 'Horário na história e continuidade.' },
+        effects: { type: 'array', items: { type: 'string' } },
+        otherEffect: { type: 'string' },
+        power: { type: 'string', description: 'Energia e gerador.' },
+        setupMinutes: { type: 'integer', minimum: 1 },
+        notes: { type: 'string' }
+      },
+      required: ['scene']
+    }
+  },
+  {
     name: 'get_sound',
     description:
       'Lê a pré-produção de som (janela Som): as plantas de som (microfones sobre cada mapa de luz, ou plantas só de som, com tipo, posição em metros, rotação, modelo, canal, sem fio, altura, alcance, quem segura a vara e o ator de cada lapela), a ficha de som de cada cena (captação, quem fala, riscos, o que pedir no set, room tone, efeitos, playback, observações, e a linha que vai para a ordem do dia), os ambientes a gravar por locação, as músicas (com as cenas pelos números atuais) e a lista de equipamento de som.',

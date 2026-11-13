@@ -81,6 +81,7 @@ describe('scene synopsis', () => {
       setStoryboard: () => undefined,
       setLightMaps: () => undefined,
       setSound: () => undefined,
+      setLighting: () => undefined,
       setCharacters: () => undefined,
       setNotes: () => undefined,
       save: async () => undefined,

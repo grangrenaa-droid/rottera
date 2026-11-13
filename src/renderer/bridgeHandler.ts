@@ -1,7 +1,9 @@
-import type { Beat, Block, Board, CharacterSheet, Kind, LightMap, Mic, MicType, Note, NoteColor, Script, Sound, Storyboard, TitlePage } from '../shared/types'
+import type { Beat, Block, Board, CharacterSheet, Kind, LightMap, Lighting, Mic, MicType, Note, NoteColor, Script, Sound, Storyboard, TitlePage } from '../shared/types'
 import { LABEL_MAX, MIC_DEFS, MIC_TYPES, cleanSound, emptySheet, emptySound, newMic, soundLineOf } from '../shared/sound'
 import { soundAutoLines } from '../shared/equipment'
-import { sceneInfo } from '../shared/production'
+import { dayLabel, emptyProduction, sceneInfo } from '../shared/production'
+import { cleanLighting, dayWarnings, daySun, emptyLightSheet, emptyLighting } from '../shared/lighting'
+import { lightAutoLines } from '../shared/equipment'
 import { NOTE_COLORS, NOTE_MAX } from '../shared/notes'
 import { SYNOPSIS_MAX, cleanSynopsis } from '../shared/scriptfile'
 import { FIELDS, characterKey, listCharacters, newSheet, presentationOf } from '../shared/characters'
@@ -31,6 +33,8 @@ export interface BridgeContext {
   setLightMaps(maps: LightMap[]): void
   /** The Som window's data (microphones, sheets, ambiences, music, equipment). */
   setSound(sound: Sound): void
+  /** The Luz window's data (light sheets, place, light equipment). */
+  setLighting(lighting: Lighting): void
   setCharacters(sheets: CharacterSheet[]): void
   setNotes(notes: Note[]): void
   save(): Promise<void>
@@ -449,6 +453,51 @@ export function createBridgeHandler(ctx: BridgeContext): (method: string, params
           })),
           load: electricLoad(mapWatts(m))
         }))
+      }
+
+      case 'get_lighting': {
+        const s = ctx.script()
+        const lighting = s.lighting ?? emptyLighting()
+        const scenes = sceneInfo(s)
+        const prod = s.production ?? emptyProduction()
+        return {
+          place: lighting.place ?? null,
+          sheets: scenes
+            .filter((sc) => sc.id && lighting.sheets[sc.id])
+            .map((sc) => ({ scene: sc.number, heading: sc.heading, ...lighting.sheets[sc.id as string] })),
+          days: prod.days.map((d, n) => {
+            const { place, sun } = daySun(d, lighting)
+            return {
+              day: dayLabel(d, n),
+              date: d.date ?? null,
+              place: place ?? null,
+              sun,
+              warnings: dayWarnings(d, scenes, lighting).map((w) => ({ scene: w.scene.number, at: w.at, text: w.text }))
+            }
+          }),
+          equipment: lightAutoLines(s.lightMaps ?? []).map((l) => ({ name: l.name, qty: l.qty, fromMaps: true }))
+            .concat(lighting.equipment.map((e) => ({ name: e.name, qty: e.qty, fromMaps: false })))
+        }
+      }
+
+      case 'set_light_sheet': {
+        const s = ctx.script()
+        const scenes = sceneInfo(s)
+        const ref = typeof p.scene === 'number' ? String(p.scene) : typeof p.scene === 'string' ? p.scene.trim() : ''
+        const sc = scenes.find((x) => x.number === ref)
+        if (!sc) fail('Cena não encontrada (use o número da cena, como em get_outline).')
+        const sid = sc.id ?? ctx.handle()?.anchorBlocks([sc.index])[0] ?? null
+        if (!sid) fail('Não foi possível marcar a cena. Tente de novo.')
+        const lighting = ctx.script().lighting ?? emptyLighting()
+        const cur: Record<string, unknown> = { ...(lighting.sheets[sid] ?? emptyLightSheet()) }
+        for (const k of ['quality', 'contrast', 'color', 'sources', 'otherSource', 'story', 'effects', 'otherEffect', 'power', 'setupMinutes', 'notes']) {
+          if (p[k] !== undefined) cur[k] = p[k]
+        }
+        const cleaned = cleanLighting({ ...lighting, sheets: { ...lighting.sheets, [sid]: cur } })
+        if (!cleaned) fail('Ficha inválida.')
+        ctx.setLighting(cleaned)
+        ctx.touched('lighting')
+        return { scene: sc.number, ...cleaned.sheets[sid] }
       }
 
       case 'get_sound': {

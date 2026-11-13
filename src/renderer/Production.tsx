@@ -1,5 +1,5 @@
 import { useMemo, useState, type DragEvent } from 'react'
-import type { BreakdownCategory, Frame, Production } from '../shared/types'
+import type { BreakdownCategory, Frame, Production, ShootDay } from '../shared/types'
 import type { Report } from '../shared/reports'
 import type { DaySound } from '../shared/production'
 import { reportToCsv } from '../shared/reports'
@@ -62,6 +62,8 @@ interface Props {
   onExportCsv(name: string, csv: string): void
   /** The Som window's line per scene and ambiences per day, for the day sheets. */
   daySound?: DaySound
+  /** The Luz window's sun of a day, on one line, for its day sheet ('' when the day has no date or place). */
+  daySunLine?(day: ShootDay): string
 }
 
 type Tab = 'breakdown' | 'plan'
@@ -495,7 +497,7 @@ function Plan(p: Props): JSX.Element {
                     >
                       ↓
                     </button>
-                    <button className="btn ghost" onClick={() => p.onExportPdf(dayReport(d, n, p.scenes, prod, shots, p.daySound), false)}>
+                    <button className="btn ghost" onClick={() => p.onExportPdf(dayReport(d, n, p.scenes, prod, shots, p.daySound, p.daySunLine?.(d) || undefined), false)}>
                       Ordem do dia (PDF)
                     </button>
                     <button className="btn ghost" onClick={() => p.onChange(removeDay(prod, d.id))}>

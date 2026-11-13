@@ -27,6 +27,7 @@ function fake(initial: Block[], initialNotes: Note[] = []) {
     setStoryboard: () => undefined,
     setLightMaps: () => undefined,
     setSound: () => undefined,
+    setLighting: () => undefined,
     setCharacters: () => undefined,
     setNotes: (next) => {
       notes = next

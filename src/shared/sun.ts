@@ -128,6 +128,8 @@ export function sceneLight(time: string): SceneLight | null {
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toUpperCase()
+    // "MAIS TARDE", "LOGO DEPOIS" are continuity, not a time of day
+    .replace(/MAIS TARDE|LOGO DEPOIS|MOMENTOS DEPOIS|LATER/g, '')
   if (/AMANHECER|ALVORADA|AURORA|NASCER DO SOL|DAWN|SUNRISE/.test(t)) return 'dawn'
   if (/ENTARDECER|POR DO SOL|CREPUSCULO|ANOITECER|FIM DE TARDE|DUSK|SUNSET|MAGIC HOUR/.test(t)) return 'dusk'
   if (/NOITE|MADRUGADA|NIGHT/.test(t)) return 'night'

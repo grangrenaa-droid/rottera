@@ -59,6 +59,11 @@ describe('whether the light of a scene fits its time', () => {
     expect(sceneLight('AMANHECER')).toBe('dawn')
     expect(sceneLight('PÔR DO SOL')).toBe('dusk')
     expect(sceneLight('CONTINUOUS')).toBeNull()
+    // continuity, not a time of day
+    expect(sceneLight('MAIS TARDE')).toBeNull()
+    expect(sceneLight('CONTÍNUO')).toBeNull()
+    expect(sceneLight('FIM DE TARDE')).toBe('dusk')
+    expect(sceneLight('TARDE')).toBe('day')
   })
 
   it('a night scene in the sun, a dawn in the afternoon: warnings; a day scene in daylight: none', () => {

@@ -5,6 +5,9 @@ import type { Report } from '../shared/reports'
 import { LightMapView } from './LightMap'
 import { LightSheetView } from './LightSheet'
 import { LightSunView } from './LightSun'
+import { EquipmentView } from './Equipment'
+import { heaviestLoad, lightAutoLines } from '../shared/equipment'
+import { loadText } from '../shared/lightmap'
 
 interface Props {
   maps: LightMap[]
@@ -64,7 +67,19 @@ export function LightView(p: Props): JSX.Element {
       {tab === 'sun' && (
         <LightSunView lighting={p.lighting} production={p.production} scenes={p.scenes} onLighting={p.onLighting} onProduction={p.onProduction} onExportPdf={p.onExportPdf} />
       )}
-      {tab === 'equipment' && <p className="muted">Em breve.</p>}
+      {tab === 'equipment' && (
+        <EquipmentView
+          title="Equipamento de luz"
+          reportId="equipamento-luz"
+          auto={lightAutoLines(p.maps)}
+          items={p.lighting.equipment}
+          state={p.lighting.equipState}
+          note={heaviestLoad(p.maps).watts > 0 ? `Carga do mapa mais pesado: ${loadText(heaviestLoad(p.maps).watts)}.` : undefined}
+          onChange={(equipment, equipState) => p.onLighting({ ...p.lighting, equipment, equipState })}
+          onExportPdf={(r) => p.onExportPdf(r, false)}
+          onExportCsv={p.onExportCsv}
+        />
+      )}
     </div>
   )
 }

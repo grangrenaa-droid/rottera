@@ -318,6 +318,18 @@ check('sixteen reports: Filmagem, then music and sound equipment last', all.leng
   check('the microphones do not change the light map', (await tool('get_lightmaps'))[lm.index].items.length === 1)
 }
 
+// light: a scene's light sheet, and the sun of the place
+{
+  const o = await tool('get_outline')
+  const r = await tool('set_light_sheet', { scene: o[0].number, quality: 'soft', sources: ['Janela', 'Abajur'], setupMinutes: 30, color: 'âmbar' })
+  check('set_light_sheet writes the sheet', r.quality === 'soft' && r.sources?.join() === 'Janela,Abajur', JSON.stringify(r))
+  const bad = await tool('set_light_sheet', { scene: 'não existe' })
+  check('set_light_sheet refuses an unknown scene', typeof bad.error === 'string', JSON.stringify(bad))
+  const l = await tool('get_lighting')
+  check('get_lighting reads the sheet by scene number', (l.sheets ?? []).some((x) => x.scene === o[0].number && x.color === 'âmbar'), JSON.stringify(l.sheets))
+  check('get_lighting lists the shooting days', Array.isArray(l.days), JSON.stringify(l))
+}
+
 // synopsis: the AI writes one and it shows under the heading
 {
   const o = await tool('get_outline')
