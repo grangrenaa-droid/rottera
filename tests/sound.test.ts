@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cleanSound, emptySheet, emptySound, micsOfScene, newMic, plansOfScene, reconcileSound, sheetsReport, musicReport, ambiencesReport, soundLineOf, ambiencesToRecord } from '../src/shared/sound'
+import { MIC_DEFS, cleanSound, emptySheet, emptySound, micsOfScene, newMic, plansOfScene, reconcileSound, sheetsReport, musicReport, ambiencesReport, soundLineOf, ambiencesToRecord } from '../src/shared/sound'
 import { buildPdfHtml } from '../src/main/pdf'
 import type { SceneInfo } from '../src/shared/production'
 import { parseScriptFile, serialize } from '../src/shared/scriptfile'
@@ -187,5 +187,11 @@ describe('the sound plans in the PDF', () => {
     expect(html).toContain('Shotgun')
     expect(html).toContain('MKH 416')
     expect(html).not.toContain('MAPA DE LUZ')
+  })
+})
+
+describe('microphone names', () => {
+  it('the figure-8 microphone is called Bidirecional', () => {
+    expect(MIC_DEFS.figure8.label).toBe('Bidirecional')
   })
 })

@@ -10,7 +10,7 @@ export const MIC_DEFS: Record<MicType, { label: string; group: 'Unidirecionais' 
   supercardioid: { label: 'Supercardioide', group: 'Unidirecionais', range: 2 },
   shotgun: { label: 'Shotgun', group: 'Unidirecionais', range: 3 },
   omni: { label: 'Omnidirecional', group: 'Outros', range: 1.2 },
-  figure8: { label: 'Figura 8', group: 'Outros', range: 1.5 },
+  figure8: { label: 'Bidirecional', group: 'Outros', range: 1.5 },
   lavalier: { label: 'Lapela', group: 'Outros', range: 0.5 },
   recorder: { label: 'Gravador', group: 'Outros', range: 0 }
 }
