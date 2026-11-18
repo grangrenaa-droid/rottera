@@ -1,6 +1,6 @@
 import type { LightItem, LightItemType, LightMap, LightRole, MoveStop, SensorId } from './types'
 import { newId } from './structures'
-import { litArea, sunShadows, wallSegments, type Pt as ShadowPt } from './shadows'
+import { litArea, sunRotation, sunShadows, wallSegments, type Pt as ShadowPt } from './shadows'
 
 /** Pixels per metre in the drawing's own coordinate system. */
 export const S = 60
@@ -1195,11 +1195,13 @@ function lightAndShadowSvg(map: LightMap): string {
     if (!isLight(it.type) || !d.cone) continue
     const color = beamColor(it)
     if (it.type === 'sun' || it.type === 'moon') {
-      const shadows = sunShadows(it.rotation, walls, map.width, map.height)
+      // the light comes from where the sun is, towards the middle of the set
+      const towards = sunRotation(it, map.width, map.height)
+      const shadows = sunShadows(towards, walls, map.width, map.height)
       // the mask's name carries what it cuts: a sun turned (or a wall moved) gets a new one, so the screen never keeps
       // an old shadow, and two drawings of the same map side by side keep their own
       let h = 5381
-      for (const c of `${it.rotation}|${shadows.map(pts).join('|')}`) h = ((h << 5) + h + c.charCodeAt(0)) | 0
+      for (const c of `${towards}|${shadows.map(pts).join('|')}`) h = ((h << 5) + h + c.charCodeAt(0)) | 0
       const mask = `ls-sun-${key(map.id)}-${key(it.id)}-${(h >>> 0).toString(36)}`
       out +=
         `<g data-sun="${escapeXml(it.id)}" clip-path="url(#${clip})" pointer-events="none">` +

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { insidePolygon, litArea, sunShadows, wallSegments } from '../src/shared/shadows'
+import { insidePolygon, litArea, sunRotation, sunShadows, wallSegments } from '../src/shared/shadows'
 import { cleanLightMap, lightMapSvg, newItem, newLightMap } from '../src/shared/lightmap'
 import type { LightMap } from '../src/shared/types'
 
@@ -77,13 +77,31 @@ describe('light and shadow on the drawing', () => {
   })
 })
 
-describe('the sun when it turns', () => {
-  it('gets a new mask, so two drawings or an old one on screen never keep the shadow of another direction', () => {
-    const at = (rotation: number): string => {
-      const svg = lightMapSvg({ ...newLightMap('Sala'), id: 'sala', shadows: true, items: [wall(4, 2, 4), { ...newItem('sun', 1, 1), id: 'sol', rotation }] })
+describe('the sun when it moves', () => {
+  it('gets a new mask, so two drawings or an old one on screen never keep the shadow of another place', () => {
+    const at = (x: number): string => {
+      const svg = lightMapSvg({ ...newLightMap('Sala'), id: 'sala', shadows: true, items: [wall(4, 2, 4), { ...newItem('sun', x, 1), id: 'sol' }] })
       return /<mask id="([^"]+)"/.exec(svg)?.[1] ?? ''
     }
-    expect(at(135)).not.toBe(at(225))
-    expect(at(135)).toBe(at(135))
+    expect(at(1)).not.toBe(at(7))
+    expect(at(1)).toBe(at(1))
+  })
+})
+
+describe('the sun comes from where it is', () => {
+  it('its light goes from its place towards the middle of the set', () => {
+    // top right of an 8 x 6 set: towards the middle, down and to the left
+    expect(Math.round(sunRotation({ x: 7.2, y: 0.6, rotation: 135 }, 8, 6))).toBe(233)
+    // right at the middle it has no side: its own direction
+    expect(sunRotation({ x: 4, y: 3, rotation: 90 }, 8, 6)).toBe(90)
+  })
+
+  it('dragging the sun moves the shadow; turning it does not', () => {
+    const shade = (x: number, y: number, rotation: number): string => {
+      const svg = lightMapSvg({ ...newLightMap('Sala'), id: 'sala', width: 8, height: 6, shadows: true, items: [wall(2, 3, 4, 90), { ...newItem('sun', x, y), id: 'sol', rotation }] })
+      return /data-shade="sol"[^>]*><polygon points="([^"]+)"/.exec(svg)?.[1] ?? ''
+    }
+    expect(shade(7.5, 0.5, 0)).toBe(shade(7.5, 0.5, 200))
+    expect(shade(7.5, 0.5, 0)).not.toBe(shade(0.5, 5.5, 0))
   })
 })

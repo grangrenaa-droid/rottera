@@ -124,3 +124,14 @@ export function insidePolygon(p: Pt, poly: Pt[]): boolean {
   }
   return inside
 }
+
+/**
+ * Where the sun or the moon shines: from where the piece is towards the middle of the set (dragging it to another
+ * side moves the shadows). Right at the middle it has no side, and its own rotation says it.
+ */
+export function sunRotation(it: { x: number; y: number; rotation: number }, width: number, height: number): number {
+  const dx = width / 2 - it.x
+  const dy = height / 2 - it.y
+  if (Math.hypot(dx, dy) < 0.05) return it.rotation
+  return (((Math.atan2(dx, -dy) * 180) / Math.PI) % 360 + 360) % 360
+}

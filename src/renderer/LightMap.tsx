@@ -927,6 +927,11 @@ export function LightMapView({ maps, scenes, onChange, onExport, focusMap }: Pro
                 <StopsEditor it={selected} width={map.width} height={map.height} keepOne={false} noun="Marca" onChange={(next) => updateItem(selected.id, next)} />
               </fieldset>
             )}
+            {map.shadows && (selected.type === 'sun' || selected.type === 'moon') && (
+              <p className="lm-hint" role="note">
+                Com “Luz e sombra”, a luz vem de onde {selected.type === 'sun' ? 'o sol' : 'a lua'} está, em direção ao centro do set. Arraste a peça para outro lado para mudar as sombras.
+              </p>
+            )}
             {isLight(selected.type) && (
               <fieldset className="lm-tech">
                 <legend>Ficha técnica · luz nº {lightNumbers(map).get(selected.id)}</legend>
