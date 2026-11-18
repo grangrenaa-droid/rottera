@@ -24,7 +24,7 @@
   position: absolute; top: 6px; left: 6px; min-width: 24px; height: 24px; padding: 0 6px; border-radius: var(--radius-pill);
   background: var(--color-text); color: var(--color-bg); font-size: 12px; line-height: 24px; text-align: center;
 }
-.sb-card textarea { height: auto; resize: vertical; }
+.sb-card textarea { field-sizing: content; min-height: 52px; resize: none; } /* grows with the caption, never scrolls */
 .sb-actions { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
 .sb-actions select { height: 28px; max-width: 150px; }
 

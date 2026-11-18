@@ -50,6 +50,16 @@ async function catchReports(app: ElectronApplication): Promise<() => Promise<any
 }
 
 test.describe('F29 updates of 17/11', () => {
+  test('F29-H4 a long storyboard caption grows instead of scrolling', async ({ app, page, dialogs }) => {
+    await open(page, dialogs)
+    await menu(app, 'view-storyboard')
+    await page.getByRole('button', { name: 'Quadro vazio' }).click()
+    const caption = page.locator('.sb-card textarea').first()
+    await caption.fill(Array.from({ length: 8 }, (_, i) => `Linha ${i + 1} da legenda, com ação e som.`).join('\n'))
+    const { scroll, client } = await caption.evaluate((el) => ({ scroll: el.scrollHeight, client: el.clientHeight }))
+    expect(scroll, 'no scroll bar in the caption').toBeLessThanOrEqual(client + 1)
+  })
+
   test('F29-H3 a light becomes RGB and its beam takes the chosen colour', async ({ app, page, dialogs }) => {
     const dir = await open(page, dialogs)
     await menu(app, 'view-lightmap')
