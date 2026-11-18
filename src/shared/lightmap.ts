@@ -1,6 +1,6 @@
 import type { LightItem, LightItemType, LightMap, LightRole, MoveStop, SensorId } from './types'
 import { newId } from './structures'
-import { litArea, sunRotation, sunShadows, wallSegments, type Pt as ShadowPt } from './shadows'
+import { blockers, insidePolygon, litArea, pointing, reflectedBeam, sunRotation, sunShadows, type Pt as ShadowPt, type Segment as ShadowSegment } from './shadows'
 
 /** Pixels per metre in the drawing's own coordinate system. */
 export const S = 60
@@ -1185,21 +1185,48 @@ export function lightMapSvg(map: LightMap, opts: SvgOptions = {}): string {
 function lightAndShadowSvg(map: LightMap): string {
   const W = map.width * S
   const H = map.height * S
-  // doors are gaps in the walls; windows stop the full light but let a softened one through
-  const walls = wallSegments(map)
-  const open = wallSegments(map, { windows: 'open' })
-  const windows = open.length !== walls.length || open.some((w, i) => w.x1 !== walls[i].x1 || w.y1 !== walls[i].y1 || w.x2 !== walls[i].x2 || w.y2 !== walls[i].y2)
+  // what stops each kind of light: the full light stops at walls, windows and every modifier in the set; the softened
+  // one goes through windows and diffusers; the patterned one through a cucoloris (doors are gaps for all of them)
+  const walls = blockers(map, 'sharp')
+  const open = blockers(map, 'soft')
+  const cut = blockers(map, 'cookie')
+  const same = (a: ShadowSegment[], b: ShadowSegment[]): boolean =>
+    a.length === b.length && a.every((w, i) => w.x1 === b[i].x1 && w.y1 === b[i].y1 && w.x2 === b[i].x2 && w.y2 === b[i].y2)
+  const softened = !same(walls, open)
+  const patterned = !same(walls, cut)
+  const mirrors = map.items.filter((it) => it.type === 'reflector' || it.type === 'bounce')
   const pts = (list: ShadowPt[]): string => list.map((p) => `${f(p.x * S)},${f(p.y * S)}`).join(' ')
+  const poly = (list: ShadowPt[][], fill: string): string => list.map((q) => `<polygon points="${pts(q)}" fill="${fill}"/>`).join('')
   const key = (s: string): string => s.replace(/[^A-Za-z0-9_-]/g, '')
   const clip = `ls-clip-${key(map.id)}`
   const blur = `ls-soft-${key(map.id)}`
-  let out = `<clipPath id="${clip}"><rect x="0" y="0" width="${W}" height="${H}"/></clipPath>`
-  if (windows) out += `<filter id="${blur}" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="7"/></filter>`
   const hash = (text: string): string => {
     let h = 5381
     for (const c of text) h = ((h << 5) + h + c.charCodeAt(0)) | 0
     return (h >>> 0).toString(36)
   }
+  // the patches of light a cucoloris lets through, in the light's own colour
+  const dapples = (id: string, color: string): string =>
+    `<pattern id="${id}" width="44" height="44" patternUnits="userSpaceOnUse" patternTransform="rotate(23)">` +
+    `<ellipse cx="11" cy="12" rx="9" ry="5" fill="${color}"/><ellipse cx="32" cy="31" rx="6" ry="10" fill="${color}"/>` +
+    `<circle cx="34" cy="9" r="4" fill="${color}"/><circle cx="12" cy="35" r="5" fill="${color}"/></pattern>`
+  // light sent back by the reflectors and bounces it reaches: `incoming` says where it comes from, or null when it does not
+  const sentBack = (color: string, incoming: (m: LightItem) => { dir: ShadowPt; range: number } | null): string => {
+    let s = ''
+    for (const m of mirrors) {
+      const inc = incoming(m)
+      if (!inc) continue
+      const area = litArea(reflectedBeam(m, inc.dir, inc.range), blockers(map, 'sharp', m.id))
+      s +=
+        m.type === 'bounce'
+          ? `<polygon data-bounce-soft="${escapeXml(m.id)}" points="${pts(area)}" fill="${color}" fill-opacity="0.11" filter="url(#${blur})"/>`
+          : `<polygon data-bounce="${escapeXml(m.id)}" points="${pts(area)}" fill="${color}" fill-opacity="0.13" stroke="${color}" stroke-width="1" stroke-dasharray="2 3"/>`
+    }
+    return s
+  }
+  let out =
+    `<clipPath id="${clip}"><rect x="0" y="0" width="${W}" height="${H}"/></clipPath>` +
+    `<filter id="${blur}" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="7"/></filter>`
   for (const it of map.items) {
     const d = ITEM_DEFS[it.type]
     if (!isLight(it.type) || !d.cone) continue
@@ -1207,38 +1234,87 @@ function lightAndShadowSvg(map: LightMap): string {
     if (it.type === 'sun' || it.type === 'moon') {
       // the light comes from where the sun is, towards the middle of the set
       const towards = sunRotation(it, map.width, map.height)
-      // full sun stops at walls and windows; the shadow proper is what not even the softened light reaches
+      // full sun stops at everything; softened light gets through windows and diffusers, patches through a cucoloris;
+      // the shadow proper is where none of them gets
       const shadows = sunShadows(towards, walls, map.width, map.height)
-      const dark = windows ? sunShadows(towards, open, map.width, map.height) : shadows
-      // the mask's name carries what it cuts: a sun moved (or a wall moved) gets a new one, so the screen never keeps
+      const soft = softened ? sunShadows(towards, open, map.width, map.height) : shadows
+      const patch = patterned ? sunShadows(towards, cut, map.width, map.height) : shadows
+      // the masks' names carry what they cut: a sun moved (or a wall moved) gets new ones, so the screen never keeps
       // an old shadow, and two drawings of the same map side by side keep their own
-      const id = `${key(map.id)}-${key(it.id)}-${hash(`${towards}|${shadows.map(pts).join('|')}|${dark.map(pts).join('|')}`)}`
-      const poly = (list: ShadowPt[][], fill: string): string => list.map((q) => `<polygon points="${pts(q)}" fill="${fill}"/>`).join('')
+      const id = `${key(map.id)}-${key(it.id)}-${hash(`${towards}|${[shadows, soft, patch].map((l) => l.map(pts).join('|')).join('#')}`)}`
+      const dir = pointing(towards)
       out +=
         `<g data-sun="${escapeXml(it.id)}" clip-path="url(#${clip})" pointer-events="none">` +
         `<mask id="ls-sun-${id}"><rect x="0" y="0" width="${W}" height="${H}" fill="#ffffff"/>${poly(shadows, '#000000')}</mask>` +
         `<rect x="0" y="0" width="${W}" height="${H}" fill="${color}" fill-opacity="0.12" mask="url(#ls-sun-${id})"/>` +
-        (windows
-          ? // through a window: the light that gets in, softened (fainter, blurred edges)
-            `<mask id="ls-win-${id}"><rect x="0" y="0" width="${W}" height="${H}" fill="#000000"/>${poly(shadows, '#ffffff')}${poly(dark, '#000000')}</mask>` +
+        (softened
+          ? // through a window or a diffuser: the light that gets in, softened (fainter, blurred edges)
+            `<mask id="ls-win-${id}"><rect x="0" y="0" width="${W}" height="${H}" fill="#000000"/>${poly(shadows, '#ffffff')}${poly(soft, '#000000')}</mask>` +
             `<g data-sun-window="${escapeXml(it.id)}" mask="url(#ls-win-${id})"><rect x="0" y="0" width="${W}" height="${H}" fill="${color}" fill-opacity="0.09" filter="url(#${blur})"/></g>`
           : '') +
-        `<g data-shade="${escapeXml(it.id)}" opacity="0.16">${poly(dark, '#3d4654')}</g>` +
+        (patterned
+          ? `<mask id="ls-cut-${id}"><rect x="0" y="0" width="${W}" height="${H}" fill="#000000"/>${poly(shadows, '#ffffff')}${poly(patch, '#000000')}</mask>` +
+            dapples(`ls-dapple-${id}`, color) +
+            `<g data-cookie="${escapeXml(it.id)}" mask="url(#ls-cut-${id})"><rect x="0" y="0" width="${W}" height="${H}" fill="url(#ls-dapple-${id})" fill-opacity="0.3"/></g>`
+          : '') +
+        (patterned
+          ? // the shadow is only where neither the softened nor the patterned light gets
+            `<mask id="ls-dark-${id}"><rect x="0" y="0" width="${W}" height="${H}" fill="#000000"/>${poly(patch, '#ffffff')}</mask>` +
+            `<g data-shade="${escapeXml(it.id)}" opacity="0.16" mask="url(#ls-dark-${id})">${poly(soft, '#3d4654')}</g>`
+          : `<g data-shade="${escapeXml(it.id)}" opacity="0.16">${poly(soft, '#3d4654')}</g>`) +
+        // a reflector in the sun (not in the shadow of anything else) sends it back
+        sentBack(color, (m) =>
+          sunShadows(towards, blockers(map, 'sharp', m.id), map.width, map.height).some((q) => insidePolygon(m, q))
+            ? null
+            : { dir, range: 4 }
+        ) +
         `</g>`
       continue
     }
     const beam = { x: it.x, y: it.y, rotation: it.rotation, spread: spreadOf(it), range: it.range ?? d.cone.range, from: -frontOf(it.type) / S }
     const area = litArea(beam, walls)
-    if (windows) {
-      // what gets through the windows: the same beam with the windows open, softened, under the sharp one
+    if (softened) {
+      // what gets through windows and diffusers: the same beam with them open, softened, under the sharp one
       const through = litArea(beam, open)
       if (pts(through) !== pts(area)) {
         out += `<polygon data-soft="${escapeXml(it.id)}" points="${pts(through)}" clip-path="url(#${clip})" fill="${color}" fill-opacity="0.10" filter="url(#${blur})" pointer-events="none"/>`
       }
     }
+    if (patterned) {
+      // what gets through a cucoloris: patches of light beyond it, where the full light does not reach
+      const through = litArea(beam, cut)
+      if (pts(through) !== pts(area)) {
+        const id = `${key(map.id)}-${key(it.id)}-${hash(`${pts(through)}|${pts(area)}`)}`
+        out +=
+          `<mask id="ls-cut-${id}"><polygon points="${pts(through)}" fill="#ffffff"/><polygon points="${pts(area)}" fill="#000000"/></mask>` +
+          dapples(`ls-dapple-${id}`, color) +
+          `<g data-cookie="${escapeXml(it.id)}" clip-path="url(#${clip})" mask="url(#ls-cut-${id})" pointer-events="none">` +
+          `<polygon points="${pts(through)}" fill="url(#ls-dapple-${id})" fill-opacity="0.35"/></g>`
+      }
+    }
     out +=
       `<polygon data-lit="${escapeXml(it.id)}" points="${pts(area)}" clip-path="url(#${clip})" fill="${color}" fill-opacity="0.16" ` +
       `stroke="${color}" stroke-width="1" stroke-dasharray="5 4" pointer-events="none"/>`
+    // a reflector or bounce the full light reaches sends it back, with the reach the light has left
+    const o = { x: beam.x + pointing(beam.rotation).x * beam.from, y: beam.y + pointing(beam.rotation).y * beam.from }
+    const back = sentBack(color, (m) => {
+      if (!insidePolygon(m, litArea(beam, blockers(map, 'sharp', m.id)))) return null
+      const dist = Math.hypot(m.x - o.x, m.y - o.y)
+      if (dist < 1e-6) return null
+      return { dir: { x: (m.x - o.x) / dist, y: (m.y - o.y) / dist }, range: Math.max(1, beam.range - dist) }
+    })
+    if (back) out += `<g clip-path="url(#${clip})" pointer-events="none">${back}</g>`
+  }
+  // a butterfly over the scene: the light under it softer and lighter
+  for (const it of map.items) {
+    if (it.type !== 'overhead') continue
+    const len = (it.length ?? ITEM_DEFS.overhead.length ?? 3.6) * S
+    out +=
+      `<g data-overhead="${escapeXml(it.id)}" clip-path="url(#${clip})" pointer-events="none">` +
+      `<g transform="translate(${f(it.x * S)} ${f(it.y * S)}) rotate(${f(it.rotation)})">` +
+      `<rect x="${f(-len / 2)}" y="${f(-len / 2)}" width="${f(len)}" height="${f(len)}" fill="#ffffff" fill-opacity="0.55" filter="url(#${blur})"/>` +
+      `<rect x="${f(-len / 2)}" y="${f(-len / 2)}" width="${f(len)}" height="${f(len)}" fill="#ffe7a3" fill-opacity="0.14" filter="url(#${blur})"/>` +
+      `</g></g>`
   }
   return `<g class="light-and-shadow">${out}</g>`
 }

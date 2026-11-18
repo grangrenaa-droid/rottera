@@ -1,7 +1,7 @@
-import type { LightMap } from './types'
+import type { LightItemType, LightMap } from './types'
 
 /**
- * Light and shadow on the light map, in metres (Etapa 1: only walls stop the light). Not a physical simulation: it
+ * Light and shadow on the light map, in metres: walls, doors, windows and the modifiers (Etapas 1 to 3). Not a physical simulation: it
  * says where the light reaches and where it does not, not how much of it.
  */
 
@@ -58,10 +58,70 @@ export function wallSegments(map: LightMap, opts: { windows?: 'open' | 'closed' 
   return out
 }
 
+/**
+ * The three kinds of light the map tells apart: the full one, the softened one (through windows and diffusers) and the
+ * patterned one (through a cucoloris).
+ */
+export type Pass = 'sharp' | 'soft' | 'cookie'
+
+/** The modifiers that stand in the light's way, how long they are by default, and which light they let through. */
+const MODIFIERS: Partial<Record<LightItemType, { length: number; lets?: Pass }>> = {
+  flag: { length: 0.9 },
+  diffuser: { length: 0.9, lets: 'soft' },
+  cookie: { length: 0.9, lets: 'cookie' },
+  reflector: { length: 0.9 },
+  bounce: { length: 1.2 }
+}
+
+/**
+ * What stops one kind of light: the walls (windows let the softened light through) and every modifier standing in
+ * the set, except the one that kind of light goes through. `skip` leaves one piece out (a reflector sending light back
+ * does not stop its own light).
+ */
+export function blockers(map: LightMap, pass: Pass, skip?: string): Segment[] {
+  const out = wallSegments(map, { windows: pass === 'soft' ? 'open' : 'closed' })
+  for (const it of map.items) {
+    const m = MODIFIERS[it.type]
+    if (!m || it.id === skip || m.lets === pass) continue
+    const len = it.length ?? m.length
+    const a = (it.rotation * Math.PI) / 180
+    const dx = (Math.cos(a) * len) / 2
+    const dy = (Math.sin(a) * len) / 2
+    out.push({ x1: it.x - dx, y1: it.y - dy, x2: it.x + dx, y2: it.y + dy })
+  }
+  return out
+}
+
 /** Where a piece turned `rotation` degrees points: 0 is the top of the drawing, clockwise. */
-const pointing = (rotation: number): Pt => {
+export const pointing = (rotation: number): Pt => {
   const a = (rotation * Math.PI) / 180
   return { x: Math.sin(a), y: -Math.cos(a) }
+}
+
+/** The rotation that points along a direction (the other way round from `pointing`). */
+export const rotationOf = (v: Pt): number => ((((Math.atan2(v.x, -v.y) * 180) / Math.PI) % 360) + 360) % 360
+
+/** Light going along `v` (length 1) that meets a flat piece lying along `rotation`: where it goes, as off a mirror. */
+export function reflectDirection(v: Pt, rotation: number): Pt {
+  const a = (rotation * Math.PI) / 180
+  const u = { x: Math.cos(a), y: Math.sin(a) }
+  const k = 2 * (v.x * u.x + v.y * u.y)
+  return { x: k * u.x - v.x, y: k * u.y - v.y }
+}
+
+/**
+ * The light a reflector or a bounce sends back when light going along `incoming` reaches it, with `range` metres
+ * left. A reflector is a mirror: a narrow beam the mirror way. A bounce scatters it: a wide, shorter beam straight off
+ * its face, on the side the light came from.
+ */
+export function reflectedBeam(mod: { x: number; y: number; rotation: number; type: LightItemType }, incoming: Pt, range: number): Beam {
+  if (mod.type !== 'bounce') {
+    return { x: mod.x, y: mod.y, rotation: rotationOf(reflectDirection(incoming, mod.rotation)), spread: 30, range }
+  }
+  const a = (mod.rotation * Math.PI) / 180
+  let n = { x: -Math.sin(a), y: Math.cos(a) }
+  if (n.x * incoming.x + n.y * incoming.y > 0) n = { x: -n.x, y: -n.y }
+  return { x: mod.x, y: mod.y, rotation: rotationOf(n), spread: 120, range: range * 0.6 }
 }
 
 /** How far along a ray (from o, direction v of length 1) it meets a segment; Infinity when it does not. */

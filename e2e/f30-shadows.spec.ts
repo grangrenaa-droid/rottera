@@ -42,6 +42,37 @@ test.describe('F30 light and shadow on the light map (Etapa 1)', () => {
     await surface.screenshot({ path: 'test-results/f30-porta-janela.png' })
   })
 
+  test('F30-H3 the modifiers change the light: diffuser, cucoloris, reflector, bounce, butterfly (Etapa 3)', async ({ app, page, dialogs, userData }) => {
+    const dir = mkdtempSync(join(tmpdir(), 'rottera-f30-'))
+    const f = join(dir, 'in.fountain')
+    writeFileSync(f, 'INT. SALA - DIA\n\nLuz.\n', 'utf8')
+    await dialogs.open(f)
+    await page.getByRole('button', { name: 'Importar FDX ou Fountain…' }).click()
+    await expect(page.getByRole('textbox', { name: 'Texto do roteiro' })).toBeVisible()
+    expect((await rpc(userData, 'create_lightmap', { name: 'Sala', scene: '1', width: 10, height: 6 })).ok).toBe(true)
+    const add = async (p: Record<string, unknown>): Promise<void> => {
+      expect((await rpc(userData, 'add_light_item', { map: 'Sala', ...p })).ok).toBe(true)
+    }
+    await add({ type: 'fresnel', x: 2, y: 5.2, rotation: 0, range: 4.5 })
+    await add({ type: 'diffuser', x: 2, y: 3.4, length: 1 })
+    await add({ type: 'fresnel', x: 5, y: 5.2, rotation: 0, range: 4.5 })
+    await add({ type: 'cookie', x: 5, y: 3.4, length: 1 })
+    await add({ type: 'fresnel', x: 8.4, y: 5.2, rotation: 0, range: 4.5 })
+    await add({ type: 'reflector', x: 8.4, y: 2.8, rotation: 30 })
+    await add({ type: 'sun', x: 9.5, y: 0.4 })
+    await add({ type: 'bounce', x: 7, y: 4.6, rotation: 20 })
+    await add({ type: 'overhead', x: 4.5, y: 1.5, length: 2 })
+    await menu(app, 'view-lightmap')
+    await page.getByLabel('Luz e sombra').check()
+    const surface = page.locator('.lm-surface')
+    await expect(surface.locator('[data-soft]')).toHaveCount(1)
+    await expect(surface.locator('[data-cookie]').first()).toBeAttached()
+    await expect(surface.locator('[data-bounce]').first()).toBeAttached()
+    await expect(surface.locator('[data-bounce-soft]').first()).toBeAttached()
+    await expect(surface.locator('[data-overhead]')).toHaveCount(1)
+    await surface.screenshot({ path: 'test-results/f30-modificadores.png' })
+  })
+
   test('F30-H1 with "Luz e sombra" on, walls stop the light and the sun lights the map with shadows', async ({ app, page, dialogs, userData }) => {
     const dir = mkdtempSync(join(tmpdir(), 'rottera-f30-'))
     const f = join(dir, 'in.fountain')

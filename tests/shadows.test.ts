@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { insidePolygon, litArea, sunRotation, sunShadows, wallSegments } from '../src/shared/shadows'
+import { blockers, insidePolygon, litArea, reflectDirection, sunRotation, sunShadows, wallSegments } from '../src/shared/shadows'
 import { cleanLightMap, lightMapSvg, newItem, newLightMap } from '../src/shared/lightmap'
 import type { LightMap } from '../src/shared/types'
 
@@ -162,5 +162,53 @@ describe('doors and windows open a wall (Etapa 2)', () => {
     const plain = lightMapSvg({ ...newLightMap('x'), shadows: true, items: [wall(4, 3, 6), sun, lamp] })
     expect(plain).not.toContain('data-sun-window')
     expect(plain).not.toContain('data-soft')
+  })
+})
+
+describe('modifiers change the light (Etapa 3)', () => {
+  const mod = (type: Parameters<typeof newItem>[0], x: number, y: number, extra: Record<string, unknown> = {}) => ({ ...newItem(type, x, y), id: String(type), ...extra })
+  const lamp = { ...newItem('fresnel', 4, 5), id: 'luz', rotation: 0, range: 4 }
+  const svgOf = (items: LightMap['items']): string => lightMapSvg({ ...newLightMap('Sala'), id: 'sala', width: 8, height: 6, shadows: true, items })
+
+  it('a flag stops the light like a wall', () => {
+    const map = { ...newLightMap('x'), items: [mod('flag', 4, 3, { length: 1.2 })] }
+    const area = litArea({ x: 4, y: 5, rotation: 0, spread: 30, range: 4 }, blockers(map, 'sharp'))
+    expect(insidePolygon({ x: 4, y: 2 }, area)).toBe(false)
+    expect(insidePolygon({ x: 4, y: 3.5 }, area)).toBe(true)
+  })
+
+  it('a diffuser lets the light through softened, a cookie in patches', () => {
+    const soft = svgOf([mod('diffuser', 4, 3, { length: 1.2 }), lamp])
+    expect(soft).toContain('data-soft="luz"')
+    const cookie = svgOf([mod('cookie', 4, 3, { length: 1.2 }), lamp])
+    expect(cookie).toContain('data-cookie="luz"')
+    expect(cookie).toContain('<pattern')
+  })
+
+  it('a reflector sends back the light that reaches it, sharp; a bounce, soft and wide', () => {
+    // a reflector in the beam, turned 45°: the light goes off to the side
+    const hard = svgOf([mod('reflector', 4, 3, { rotation: 45 }), lamp])
+    expect(hard).toContain('data-bounce="reflector"')
+    expect(hard).not.toContain('data-bounce-soft')
+    const soft = svgOf([mod('bounce', 4, 3, { rotation: 45 }), lamp])
+    expect(soft).toContain('data-bounce-soft="bounce"')
+    // out of the beam: nothing comes back
+    expect(svgOf([mod('reflector', 7.5, 0.5), lamp])).not.toContain('data-bounce')
+  })
+
+  it('the reflected light goes the mirror way', () => {
+    // light going up (0, -1) meets a reflector lying at 45°: it goes off sideways
+    const r = reflectDirection({ x: 0, y: -1 }, 45)
+    expect(Math.abs(r.y)).toBeLessThan(1e-9)
+    expect(Math.abs(Math.abs(r.x) - 1)).toBeLessThan(1e-9)
+  })
+
+  it('a butterfly makes the light softer and lighter under it', () => {
+    expect(svgOf([mod('overhead', 4, 3), { ...newItem('sun', 7, 0.5), id: 'sol' }])).toContain('data-overhead="overhead"')
+  })
+
+  it('without modifiers nothing new is drawn', () => {
+    const plain = svgOf([lamp])
+    for (const tag of ['data-soft', 'data-cookie', 'data-bounce', 'data-overhead']) expect(plain).not.toContain(tag)
   })
 })
