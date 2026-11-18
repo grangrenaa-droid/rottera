@@ -244,6 +244,13 @@ test.describe('F21 breakdown, shooting plan and scene links', () => {
     const f = join(dir, 'locais.fountain')
     const heads = ['INT. COZINHA - NOITE', 'EXT. RUA - DIA', 'INT. COZINHA - DIA', 'INT. CARRO - NOITE', 'EXT. RUA - NOITE', 'INT. COZINHA - DIA']
     writeFileSync(f, heads.map((h, i) => `${h}\n\nAção ${i + 1}.\n`).join('\n'), 'utf8')
+    // a tall window, so that the days dragged between fit on the screen at once: a drag that has to scroll the page
+    // midway is lost by the test driver (people get the page scrolling by itself near the edge)
+    await app.evaluate(({ BrowserWindow }) => {
+      const w = BrowserWindow.getAllWindows()[0]
+      if (w.isMaximized()) w.unmaximize()
+      w.setContentSize(1280, 1500)
+    })
     await dialogs.open(f)
     await page.getByRole('button', { name: 'Importar FDX ou Fountain…' }).click()
     await menu(app, 'view-shooting')

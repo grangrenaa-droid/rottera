@@ -72,6 +72,34 @@ async function clickWord(page: Page, kind: string, word: string): Promise<void> 
 }
 
 test.describe('F29 updates of 17/11', () => {
+  test('F29-H7 the cast list: an actor plays a character, cannot come one day, and the plan says so', async ({ app, page, dialogs }) => {
+    const dir = await open(page, dialogs)
+    await menu(app, 'view-shooting')
+    await page.getByRole('group', { name: 'Filmagem' }).getByRole('button', { name: 'Elenco' }).click()
+    await page.getByRole('button', { name: '+ Pessoa' }).click()
+    const form = page.getByRole('region', { name: /^Ficha de / })
+    await form.getByLabel('Nome', { exact: true }).fill('Ana Souza')
+    await form.getByLabel('Personagem', { exact: true }).selectOption('MARINA')
+    await form.getByRole('radio', { name: 'Assinado' }).check()
+    await form.getByLabel('Altura').fill('1,68 m')
+    await form.getByRole('button', { name: '+ Data' }).click()
+    await form.getByLabel('Data em que não pode 1').fill('2026-11-21')
+    await expect(page.getByRole('navigation', { name: 'Pessoas do filme' })).toContainText('Ana Souza')
+
+    await page.getByRole('group', { name: 'Filmagem' }).getByRole('button', { name: 'Plano de filmagem' }).click()
+    await page.getByRole('button', { name: 'Novo dia' }).click()
+    await page.getByLabel('Dia da cena 1', { exact: true }).selectOption({ label: 'Dia 1' })
+    await page.getByLabel('Data do Dia 1').fill('2026-11-21')
+    await expect(page.locator('.plan-warn')).toContainText('Ana Souza (MARINA) não pode em 21/11/2026 · cena 1')
+
+    await menu(app, 'view-script')
+    await clickWord(page, 'character', 'MARINA')
+    await expect(page.getByRole('region', { name: 'Ficha do personagem' })).toContainText('Interpretado por Ana Souza')
+
+    const saved = await saveAs(app, page, dialogs, join(dir, 'elenco.rottera'))
+    expect(saved.people[0]).toMatchObject({ name: 'Ana Souza', group: 'cast', character: 'MARINA', contract: 'signed', height: '1,68 m', unavailable: ['2026-11-21'] })
+  })
+
   test('F29-H6 a location has a sheet with scouting photos, and a click on it in a heading opens it beside the script', async ({ app, page, dialogs }) => {
     const dir = await open(page, dialogs)
     const photo = join(dir, 'scouting.png')

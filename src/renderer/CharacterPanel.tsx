@@ -1,5 +1,6 @@
 import { useMemo, useRef } from 'react'
-import type { CharacterSheet, Script } from '../shared/types'
+import type { CharacterSheet, Person, Script } from '../shared/types'
+import { whoPlays } from '../shared/people'
 import { FIELDS, listCharacters, setSheet } from '../shared/characters'
 import { fileToDataUrl } from './Storyboard'
 
@@ -10,6 +11,8 @@ interface Props {
   onSelect(key: string): void
   onChange(sheets: CharacterSheet[]): void
   flash(text: string): void
+  /** Filmagem → Elenco: who plays the character. */
+  people: Person[]
 }
 
 /** A character's sheet beside the script: the same sheet as in Relatórios, written without leaving the text. */
@@ -42,6 +45,10 @@ export function CharacterPanel(p: Props): JSX.Element {
               <p className="muted small">
                 {current.stats ? `${current.stats.lines} ${current.stats.lines === 1 ? 'fala' : 'falas'} · ${current.stats.scenes} ${current.stats.scenes === 1 ? 'cena' : 'cenas'}` : 'ainda não fala'}
               </p>
+              {(() => {
+                const actor = whoPlays(p.people, current.name)
+                return actor ? <p className="side-actor">Interpretado por {actor.name || 'sem nome'}</p> : null
+              })()}
               <div className="side-photo">
                 {sheet?.image ? <img src={sheet.image} alt={`Imagem de referência de ${current.name}`} /> : <span className="muted">Sem imagem</span>}
               </div>

@@ -370,6 +370,7 @@ button.link:focus-visible { outline: 2px solid var(--color-focus-ring); outline-
 .plan-day-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
 .plan-day-head h3 { font-size: 13px; font-weight: 600; margin: 0; flex: 1; }
 .plan-day-head input { flex: 1; min-width: 140px; font-weight: 600; }
+.plan-day-head input.plan-day-date { flex: 0 0 auto; min-width: 0; width: 140px; font-weight: 400; }
 .plan-day-ctl { display: flex; align-items: center; gap: 2px; margin-left: auto; }
 .plan-day textarea { width: 100%; box-sizing: border-box; margin-top: 8px; resize: vertical; font: inherit; }
 .strips { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
@@ -482,3 +483,22 @@ button.link:focus-visible { outline: 2px solid var(--color-focus-ring); outline-
 .loc-photos img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--radius-sm); border: 1px solid var(--color-border-input); }
 .loc-photos .icon { position: absolute; top: 4px; right: 4px; background: var(--color-surface); }
 .side-title { font-size: 15px; margin: 0; }
+
+/* Filmagem → Elenco */
+.people-group { margin: 10px 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--color-text-muted); }
+.people-thumb { width: 24px; height: 24px; object-fit: cover; border-radius: 50%; }
+.people-form { display: grid; gap: 10px; }
+.people-form fieldset { border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 8px 12px 12px; margin: 0; display: grid; gap: 6px; }
+.people-form legend { font-weight: 700; padding: 0 4px; }
+.people-form > label, .people-main > label { font-size: 12px; font-weight: 600; }
+.people-form textarea { field-sizing: content; min-height: 52px; resize: none; width: 100%; }
+.people-top { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 16px; align-items: start; }
+.people-photo { display: grid; gap: 6px; }
+.people-photo img, .people-photo > span { width: 180px; aspect-ratio: 3 / 4; object-fit: cover; border-radius: var(--radius-sm); border: 1px solid var(--color-border-input); display: grid; place-items: center; background: var(--color-bg); }
+.people-main { display: grid; gap: 6px; }
+.people-main input, .people-main select { width: 100%; }
+.people-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.people-dates { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.people-dates li { display: flex; gap: 8px; align-items: center; }
+.plan-warn { margin: 4px 0; padding: 4px 10px; border-left: 3px solid var(--color-danger); background: color-mix(in srgb, var(--color-danger) 8%, transparent); font-size: 13px; }
+.side-actor { margin: 0; font-weight: 600; font-size: 13px; }

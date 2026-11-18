@@ -1,6 +1,8 @@
 import { useMemo, useState, type DragEvent } from 'react'
-import type { BreakKind, BreakdownCategory, Frame, LocationSheet, Production, ShootDay } from '../shared/types'
+import type { BreakKind, BreakdownCategory, Frame, LocationSheet, Person, Production, ShootDay } from '../shared/types'
 import { LocationsView } from './Locations'
+import { PeopleView } from './People'
+import { scheduleConflicts } from '../shared/people'
 import type { Report } from '../shared/reports'
 import type { DaySound } from '../shared/production'
 import { reportToCsv } from '../shared/reports'
@@ -72,10 +74,13 @@ interface Props {
   /** Filmagem → Locações. */
   locations: Record<string, LocationSheet>
   onLocations(l: Record<string, LocationSheet>): void
+  /** Filmagem → Elenco. */
+  people: Person[]
+  onPeople(people: Person[]): void
   flash(text: string): void
 }
 
-type Tab = 'breakdown' | 'plan' | 'locations'
+type Tab = 'breakdown' | 'plan' | 'locations' | 'people'
 
 export function ProductionView(p: Props): JSX.Element {
   const [tab, setTab] = useState<Tab>('breakdown')
@@ -91,8 +96,13 @@ export function ProductionView(p: Props): JSX.Element {
         <button className="btn ghost" aria-pressed={tab === 'locations'} onClick={() => setTab('locations')}>
           Locações
         </button>
+        <button className="btn ghost" aria-pressed={tab === 'people'} onClick={() => setTab('people')}>
+          Elenco
+        </button>
       </div>
-      {tab === 'locations' ? (
+      {tab === 'people' ? (
+        <PeopleView scenes={p.scenes} people={p.people} onChange={p.onPeople} onExportPdf={p.onExportPdf} onExportCsv={p.onExportCsv} flash={p.flash} />
+      ) : tab === 'locations' ? (
         <LocationsView scenes={p.scenes} locations={p.locations} onChange={p.onLocations} onExportPdf={p.onExportPdf} onExportCsv={p.onExportCsv} flash={p.flash} />
       ) : p.scenes.length === 0 ? (
         <p className="muted">Ainda não há cenas no roteiro. Escreva um cabeçalho (INT. ou EXT.) para começar.</p>
@@ -245,6 +255,8 @@ const stripKind = (s: SceneInfo): string => `${s.intExt === 'INT.' ? 'int' : 'ex
 
 function Plan(p: Props): JSX.Element {
   const [sort, setSort] = useState<Sort>('script')
+  // an actor shot on a day they said they cannot come
+  const conflicts = useMemo(() => scheduleConflicts(p.people, p.production, p.scenes), [p.people, p.production, p.scenes])
   // the strip being dragged: its scene, and the day it comes from (null = no day), for a scene in parts
   const [dragging, setDragging] = useState<{ id: string; from: string | null } | null>(null)
   const [said, setSaid] = useState('')
@@ -496,6 +508,13 @@ function Plan(p: Props): JSX.Element {
                     aria-label={`Nome do dia ${n + 1}`}
                     onChange={(ev) => p.onChange(updateDay(prod, d.id, { label: ev.target.value }))}
                   />
+                  <input
+                    type="date"
+                    className="plan-day-date"
+                    aria-label={`Data do ${dayLabel(d, n)}`}
+                    value={d.date ?? ''}
+                    onChange={(ev) => p.onChange(updateDay(prod, d.id, { date: ev.target.value || undefined }))}
+                  />
                   <span className="muted">
                     {list.length} {list.length === 1 ? 'cena' : 'cenas'} · {e ? formatEighths(e) : '0'} págs.
                   </span>
@@ -522,6 +541,11 @@ function Plan(p: Props): JSX.Element {
                     </button>
                   </span>
                 </div>
+                {conflicts.filter((c) => c.dayId === d.id).map((c) => (
+                  <p key={c.text} className="plan-warn" role="note">
+                    {c.text}
+                  </p>
+                ))}
                 {list.length === 0 ? (
                   <p className="muted">Nenhuma cena neste dia.</p>
                 ) : (

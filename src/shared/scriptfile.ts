@@ -11,6 +11,7 @@ import { cleanProduction } from './production'
 import { cleanSound } from './sound'
 import { cleanLighting } from './lighting'
 import { cleanLocations } from './locations'
+import { cleanPeople } from './people'
 import { cleanTableRead } from './reading'
 
 /** Longest scene synopsis: a line or two, not a treatment. */
@@ -136,6 +137,8 @@ export function parseScriptFile(raw: string): Script {
   if (lighting) script.lighting = lighting
   const locations = cleanLocations(src.locations)
   if (locations) script.locations = locations
+  const people = cleanPeople(src.people)
+  if (people) script.people = people
   const tableRead = cleanTableRead(src.tableRead)
   if (tableRead) script.tableRead = tableRead
   if (Array.isArray(src.notes)) {

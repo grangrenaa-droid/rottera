@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { Beat, Block, Board, CharacterSheet, Extras, Kind, LightMap, Note, Lighting, LocationSheet, Paper, Production, RevisionState, Script, Sound, Storyboard, TableRead, TitlePage, Watermark } from '../shared/types'
+import type { Beat, Block, Board, CharacterSheet, Extras, Kind, LightMap, Note, Lighting, LocationSheet, Paper, Person, Production, RevisionState, Script, Sound, Storyboard, TableRead, TitlePage, Watermark } from '../shared/types'
 import { emptyScript, emptyStoryboard } from '../shared/types'
 import { LABELS } from '../shared/elements'
 import { LONG_SCRIPT_BLOCKS, LONG_SCRIPT_DELAY, paginate, type PageLine } from '../shared/paginate'
@@ -331,6 +331,7 @@ export function App(): JSX.Element {
   const [sound, setSoundState] = useState<Sound | undefined>(undefined)
   const [lighting, setLightingState] = useState<Lighting | undefined>(undefined)
   const [locations, setLocationsState] = useState<Record<string, LocationSheet> | undefined>(undefined)
+  const [people, setPeopleState] = useState<Person[] | undefined>(undefined)
   const [paper, setPaperState] = useState<Paper>('letter')
   const [characters, setCharactersState] = useState<CharacterSheet[]>([])
   const [extras, setExtras] = useState<Extras | undefined>(undefined)
@@ -416,7 +417,7 @@ export function App(): JSX.Element {
   const timer = useRef<number | null>(null)
   const claudeTimer = useRef<number | null>(null)
 
-  scriptRef.current = { titlePage, blocks, board, storyboard, lightMaps, paper, characters, extras, revision, scenesLocked, numberScenes, watermark, notes, production, tableRead, sound, lighting, locations }
+  scriptRef.current = { titlePage, blocks, board, storyboard, lightMaps, paper, characters, extras, revision, scenesLocked, numberScenes, watermark, notes, production, tableRead, sound, lighting, locations, people }
   pathRef.current = path
 
   // ------------------------------------------------------------ theme
@@ -597,6 +598,16 @@ export function App(): JSX.Element {
     [putLightMaps]
   )
 
+  const putPeople = useCallback(
+    (list: Person[]) => {
+      const next = list.length ? list : undefined
+      scriptRef.current = { ...scriptRef.current, people: next }
+      setPeopleState(next)
+      scheduleAutosave()
+    },
+    [scheduleAutosave]
+  )
+
   const putLocations = useCallback(
     (l: Record<string, LocationSheet>) => {
       const next = Object.keys(l).length ? l : undefined
@@ -687,6 +698,7 @@ export function App(): JSX.Element {
     setSoundState(s.sound ? reconcileSound(s.sound, s.lightMaps ?? []) : undefined)
     setLightingState(s.lighting)
     setLocationsState(s.locations)
+    setPeopleState(s.people)
     setCharactersState(s.characters ?? [])
     // files made before the paper option are letter; new scripts follow the system language (A4 for Brazil)
     setPaperState(s.paper ?? (p === null && isBrazilian() ? 'a4' : 'letter'))
@@ -1748,6 +1760,8 @@ export function App(): JSX.Element {
               daySound={daySound}
               locations={locations ?? {}}
               onLocations={putLocations}
+              people={people ?? []}
+              onPeople={putPeople}
               flash={flash}
               daySunLine={(d) => {
                 const sun = daySun(d, lighting ?? emptyLighting()).sun
@@ -1800,7 +1814,7 @@ export function App(): JSX.Element {
               />
             )}
             {sideTab === 'character' && (
-              <CharacterPanel script={{ ...scriptRef.current, blocks }} selected={sideCharacter} onSelect={setSideCharacter} onChange={setCharacters} flash={flash} />
+              <CharacterPanel script={{ ...scriptRef.current, blocks }} selected={sideCharacter} onSelect={setSideCharacter} onChange={setCharacters} flash={flash} people={people ?? []} />
             )}
             {sideTab === 'location' && (
               <div className="side-char">

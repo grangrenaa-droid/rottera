@@ -280,6 +280,8 @@ export interface Script {
   lighting?: Lighting
   /** Filmagem → Locações: the technical sheet of each location, by its name as the headings write it (COZINHA). */
   locations?: Record<string, LocationSheet>
+  /** Filmagem → Elenco: the cast, extras and crew, with contacts, measurements and when they cannot come. */
+  people?: Person[]
 }
 
 /** A voice installed on the computer (its name) and a pitch, 1 = as it is. */
@@ -507,6 +509,32 @@ export interface Lighting {
   place?: Place
   equipment: EquipItem[]
   equipState: Record<string, EquipState>
+}
+
+/** Someone who works on the film (Filmagem → Elenco). */
+export interface Person {
+  id: string
+  name: string
+  group: 'cast' | 'extra' | 'crew'
+  /** The character they play (its name as the cues write it), for the cast. */
+  character: string
+  /** What they do, for crew and extras ("Diretor de fotografia"). */
+  role: string
+  /** data:image/... URL, already downscaled by the app. */
+  photo: string
+  phone: string
+  email: string
+  // ---- measurements, for wardrobe
+  height: string
+  size: string
+  shoe: string
+  chest: string
+  waist: string
+  hips: string
+  contract?: 'negotiating' | 'sent' | 'signed' | 'refused'
+  /** The days they cannot come ("2026-11-21"). */
+  unavailable: string[]
+  notes: string
 }
 
 /** A scouting photo of a location. */
