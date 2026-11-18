@@ -238,6 +238,8 @@ export interface LightMap {
   items: LightItem[]
   notes: string
   includeInPdf: boolean
+  /** Light and shadow: walls stop the light, the sun and the moon light the whole map (Etapa 1). */
+  shadows?: boolean
 }
 
 export type Paper = 'letter' | 'a4'

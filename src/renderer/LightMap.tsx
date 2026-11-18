@@ -713,6 +713,10 @@ export function LightMapView({ maps, scenes, onChange, onExport, focusMap }: Pro
             />
             Incluir no PDF
           </label>
+          <label className="check" title="As paredes barram a luz; o sol e a lua iluminam o mapa todo e as paredes fazem sombra">
+            <input type="checkbox" checked={map.shadows === true} onChange={(e) => updateMap({ shadows: e.target.checked || undefined })} />
+            Luz e sombra
+          </label>
           <button className="btn secondary" onClick={onExport}>
             Exportar mapas (PDF)
           </button>

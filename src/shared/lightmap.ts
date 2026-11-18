@@ -1,5 +1,6 @@
 import type { LightItem, LightItemType, LightMap, LightRole, MoveStop, SensorId } from './types'
 import { newId } from './structures'
+import { litArea, sunShadows, wallSegments, type Pt as ShadowPt } from './shadows'
 
 /** Pixels per metre in the drawing's own coordinate system. */
 export const S = 60
@@ -586,6 +587,7 @@ export function cleanLightMap(raw: Partial<LightMap>): LightMap | null {
     items,
     notes: typeof raw.notes === 'string' ? raw.notes.slice(0, 4000) : '',
     includeInPdf: raw.includeInPdf !== false,
+    ...(raw.shadows === true ? { shadows: true } : {}),
     ...(typeof raw.sid === 'string' && raw.sid && raw.sid.length <= 64 ? { sid: raw.sid } : {})
   }
 }
@@ -1052,15 +1054,18 @@ function movementSvg(it: LightItem, interactive: boolean, selected: boolean): { 
  * One piece of the map. `view` is the camera's field of view (and those of its faint cameras), kept apart to be
  * drawn over every other piece; a light's beam stays with the light.
  */
-function itemSvg(it: LightItem, opts: SvgOptions, number?: number): { svg: string; view: string } {
+/** Where the beam of each kind of piece starts, in drawing units ahead of its centre (negative = ahead). */
+const FRONTS: Partial<Record<LightItemType, number>> = { camera: -19, sun: 0, softbox: -10, tube: -3, kino: -8, skypanel: -8, ellipsoidal: -14, dedo: -9, moon: 0, par: -13 }
+const frontOf = (t: LightItemType): number => FRONTS[t] ?? -12
+
+/** `ownBeam` false: the light's beam is drawn by the light-and-shadow layer instead (the map has shadows on). */
+function itemSvg(it: LightItem, opts: SvgOptions, number?: number, ownBeam = true): { svg: string; view: string } {
   const d = ITEM_DEFS[it.type]
   const x = it.x * S
   const y = it.y * S
   let cone = ''
-  if (d.cone) {
-    const fronts: Partial<Record<LightItemType, number>> = { camera: -19, sun: 0, softbox: -10, tube: -3, kino: -8, skypanel: -8, ellipsoidal: -14, dedo: -9, moon: 0, par: -13 }
-    const topY = fronts[it.type] ?? -12
-    cone = coneSvg(spreadOf(it), it.range ?? d.cone.range, it.type === 'camera' ? d.cone.color : beamColor(it), topY)
+  if (d.cone && (ownBeam || it.type === 'camera')) {
+    cone = coneSvg(spreadOf(it), it.range ?? d.cone.range, it.type === 'camera' ? d.cone.color : beamColor(it), frontOf(it.type))
   }
   const isCamera = it.type === 'camera'
   const selected = opts.selectedId === it.id
@@ -1128,10 +1133,12 @@ export function lightMapSvg(map: LightMap, opts: SvgOptions = {}): string {
   const order = (t: LightItemType): number =>
     t === 'wall' || t === 'door' || t === 'window' || ITEM_DEFS[t].group === 'Cenário' ? 0 : t === 'overhead' ? 1 : t === 'actor' || t === 'camera' ? 3 : 2
   const numbers = lightNumbers(map)
+  const shadowed = map.shadows === true
   const drawn = map.items
     .slice()
     .sort((a, b) => order(a.type) - order(b.type))
-    .map((i) => itemSvg(i, opts, numbers.get(i.id)))
+    .map((i) => itemSvg(i, opts, numbers.get(i.id), !(shadowed && isLight(i.type))))
+  const lightLayer = shadowed ? lightAndShadowSvg(map) : ''
   const items = drawn.map((p) => p.svg).join('')
   // the cameras' fields of view over every piece, so what each camera sees is never hidden; they take no clicks
   const views = drawn.map((p) => p.view).join('')
@@ -1162,12 +1169,48 @@ export function lightMapSvg(map: LightMap, opts: SvgOptions = {}): string {
     grid.join('') +
     north +
     front +
+    lightLayer +
     items +
     viewLayer +
     scaleBar +
     legend +
     `</svg>`
   )
+}
+
+/**
+ * Light and shadow (the map's "Luz e sombra"): each light lights what it reaches, up to the first wall; the sun and the
+ * moon light the whole map where they point, and each wall leaves its shadow. Drawn under the pieces, never clicked.
+ */
+function lightAndShadowSvg(map: LightMap): string {
+  const W = map.width * S
+  const H = map.height * S
+  const walls = wallSegments(map)
+  const pts = (list: ShadowPt[]): string => list.map((p) => `${f(p.x * S)},${f(p.y * S)}`).join(' ')
+  const key = (s: string): string => s.replace(/[^A-Za-z0-9_-]/g, '')
+  const clip = `ls-clip-${key(map.id)}`
+  let out = `<clipPath id="${clip}"><rect x="0" y="0" width="${W}" height="${H}"/></clipPath>`
+  for (const it of map.items) {
+    const d = ITEM_DEFS[it.type]
+    if (!isLight(it.type) || !d.cone) continue
+    const color = beamColor(it)
+    if (it.type === 'sun' || it.type === 'moon') {
+      const shadows = sunShadows(it.rotation, walls, map.width, map.height)
+      const mask = `ls-sun-${key(map.id)}-${key(it.id)}`
+      out +=
+        `<g data-sun="${escapeXml(it.id)}" clip-path="url(#${clip})" pointer-events="none">` +
+        `<mask id="${mask}"><rect x="0" y="0" width="${W}" height="${H}" fill="#ffffff"/>${shadows.map((q) => `<polygon points="${pts(q)}" fill="#000000"/>`).join('')}</mask>` +
+        `<rect x="0" y="0" width="${W}" height="${H}" fill="${color}" fill-opacity="0.12" mask="url(#${mask})"/>` +
+        `<g data-shade="${escapeXml(it.id)}" opacity="0.16">${shadows.map((q) => `<polygon points="${pts(q)}" fill="#3d4654"/>`).join('')}</g>` +
+        `</g>`
+      continue
+    }
+    const area = litArea({ x: it.x, y: it.y, rotation: it.rotation, spread: spreadOf(it), range: it.range ?? d.cone.range, from: -frontOf(it.type) / S }, walls)
+    out +=
+      `<polygon data-lit="${escapeXml(it.id)}" points="${pts(area)}" clip-path="url(#${clip})" fill="${color}" fill-opacity="0.16" ` +
+      `stroke="${color}" stroke-width="1" stroke-dasharray="5 4" pointer-events="none"/>`
+  }
+  return `<g class="light-and-shadow">${out}</g>`
 }
 
 function newItemShape(t: LightItemType): Omit<LightItem, 'id' | 'x' | 'y'> {
