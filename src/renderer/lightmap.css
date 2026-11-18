@@ -55,3 +55,5 @@
 .lm-quick.map label { font-weight: 600; }
 .lm-quick.map input { width: 240px; }
 .lm-quick.map .small { flex: 1 1 260px; }
+.lm-rgb { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+#it-rgb { width: 64px; height: 32px; padding: 2px; }

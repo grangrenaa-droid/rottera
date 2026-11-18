@@ -404,13 +404,40 @@ export function effectiveKelvin(it: LightItem): number | null {
   return Math.round(1e6 / (1e6 / k + g.mired) / 50) * 50
 }
 
-/** Warm (tungsten), neutral or cool (daylight): the colour the beam is drawn in. */
+/**
+ * The colour a colour temperature is drawn in, from deep amber (candle) through amber (tungsten) and yellow to blue
+ * (daylight) and deep blue (shade). Not the physical colour, which is almost white around daylight and would vanish on
+ * the white page: a scale that keeps warm and cool apart, smoothly.
+ */
+const KELVIN_SCALE: [number, [number, number, number]][] = [
+  [1900, [0xd9, 0x48, 0x0f]],
+  [3200, [0xe0, 0x7b, 0x00]],
+  [4300, [0xb8, 0xa0, 0x00]],
+  [5600, [0x3d, 0x8b, 0xd6]],
+  [8000, [0x2b, 0x59, 0xc3]],
+  [12000, [0x3b, 0x3f, 0xb5]]
+]
+export function kelvinColor(k: number): string {
+  const s = KELVIN_SCALE
+  const hex = (c: [number, number, number]): string => `#${c.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`
+  if (k <= s[0][0]) return hex(s[0][1])
+  for (let i = 1; i < s.length; i++) {
+    if (k <= s[i][0]) {
+      const [k0, c0] = s[i - 1]
+      const [k1, c1] = s[i]
+      const t = (k - k0) / (k1 - k0)
+      return hex([0, 1, 2].map((j) => c0[j] + (c1[j] - c0[j]) * t) as [number, number, number])
+    }
+  }
+  return hex(s[s.length - 1][1])
+}
+
+/** The colour the beam is drawn in: an RGB light's own colour, or its colour temperature (after the gel). */
 export function beamColor(it: LightItem): string {
+  if (it.rgb && /^#[0-9a-f]{6}$/i.test(it.rgb)) return it.rgb.toLowerCase()
   const k = effectiveKelvin(it)
   if (k === null) return ITEM_DEFS[it.type].cone?.color ?? '#d99a00'
-  if (k < 3800) return '#e07b00'
-  if (k <= 4800) return '#b8a000'
-  return '#3d8bd6'
+  return kelvinColor(k)
 }
 
 /** Lights get numbers on the drawing, in the order they were placed: #1, #2... */
@@ -486,6 +513,7 @@ export function cleanItem(raw: Partial<LightItem>, width: number, height: number
       watts: opt(raw.watts, 0, 24000, true),
       kelvin: opt(raw.kelvin, 1000, 20000, true),
       gel: text(raw.gel, 40),
+      rgb: typeof raw.rgb === 'string' && /^#[0-9a-f]{6}$/i.test(raw.rgb) ? raw.rgb.toLowerCase() : undefined,
       diffusion: text(raw.diffusion, 40),
       intensity: opt(raw.intensity, 0, 100, true),
       height: opt(raw.height, 0, 30),
@@ -1175,7 +1203,7 @@ export function techSummary(it: LightItem): string {
   if (!isLight(it.type)) return ''
   const k = it.kelvin ?? ITEM_DEFS[it.type].kelvin
   const w = it.watts ?? ITEM_DEFS[it.type].watts
-  return [roleLabel(it.role), w ? `${w} W` : '', k ? `${k} K` : '', it.gel ?? '', it.diffusion ?? '', it.intensity !== undefined && it.intensity < 100 ? `${it.intensity}%` : '']
+  return [roleLabel(it.role), w ? `${w} W` : '', it.rgb ? `RGB ${it.rgb.toLowerCase()}` : k ? `${k} K` : '', it.gel ?? '', it.diffusion ?? '', it.intensity !== undefined && it.intensity < 100 ? `${it.intensity}%` : '']
     .filter(Boolean)
     .join(' · ')
 }
@@ -1245,7 +1273,7 @@ export function sheetRows(map: LightMap): { lights: string[][]; cameras: string[
         it.label || '—',
         roleLabel(it.role) || '—',
         w ? `${br(w)} W` : '—',
-        k ? (eff !== null && eff !== k ? `${k} K → ${eff} K` : `${k} K`) : '—',
+        it.rgb ? `RGB ${it.rgb.toLowerCase()}` : k ? (eff !== null && eff !== k ? `${k} K → ${eff} K` : `${k} K`) : '—',
         it.gel || '—',
         it.diffusion || '—',
         it.intensity !== undefined ? `${it.intensity}%` : '100%',

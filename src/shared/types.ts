@@ -171,6 +171,8 @@ export interface LightItem {
   kelvin?: number
   /** Colour or neutral-density gel: "CTO", "1/2 CTB", "ND 0.6"... */
   gel?: string
+  /** An RGB light set to a colour ("#ff0040"): the beam is drawn in it instead of the colour temperature. */
+  rgb?: string
   diffusion?: string
   /** Dimmer, 0 to 100 %. */
   intensity?: number

@@ -963,6 +963,16 @@ export function LightMapView({ maps, scenes, onChange, onExport, focusMap }: Pro
                     <option key={k} value={k} />
                   ))}
                 </datalist>
+                <label className="check lm-rgb">
+                  <input type="checkbox" checked={!!selected.rgb} onChange={(e) => updateItem(selected.id, { rgb: e.target.checked ? '#ff0040' : undefined })} />
+                  Luz RGB (cor escolhida)
+                </label>
+                {selected.rgb && (
+                  <>
+                    <label htmlFor="it-rgb">Cor da luz</label>
+                    <input id="it-rgb" type="color" value={selected.rgb} onChange={(e) => updateItem(selected.id, { rgb: e.target.value }, false)} />
+                  </>
+                )}
                 <label htmlFor="it-gel">Gelatina</label>
                 <input id="it-gel" list="lm-gels" maxLength={40} placeholder="Nenhuma" value={selected.gel ?? ''} onChange={(e) => updateItem(selected.id, { gel: e.target.value || undefined }, false)} />
                 <datalist id="lm-gels">

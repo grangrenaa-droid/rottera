@@ -50,6 +50,20 @@ async function catchReports(app: ElectronApplication): Promise<() => Promise<any
 }
 
 test.describe('F29 updates of 17/11', () => {
+  test('F29-H3 a light becomes RGB and its beam takes the chosen colour', async ({ app, page, dialogs }) => {
+    const dir = await open(page, dialogs)
+    await menu(app, 'view-lightmap')
+    await page.getByRole('button', { name: 'Criar o primeiro mapa' }).click()
+    await page.locator('.lm-piece', { hasText: 'Painel LED' }).first().click()
+    await page.getByLabel('Luz RGB (cor escolhida)').check()
+    await page.getByLabel('Cor da luz').fill('#00c060')
+    await expect(page.locator('.lm-surface svg [fill="#00c060"]').first()).toBeAttached()
+    const saved = await saveAs(app, page, dialogs, join(dir, 'rgb.rottera'))
+    expect(saved.lightMaps[0].items[0].rgb).toBe('#00c060')
+    await page.getByLabel('Luz RGB (cor escolhida)').uncheck()
+    await expect(page.getByLabel('Cor da luz')).toHaveCount(0)
+  })
+
   test('F29-H2 the light map has more furniture, each with its size', async ({ app, page, dialogs }) => {
     await open(page, dialogs)
     await menu(app, 'view-lightmap')

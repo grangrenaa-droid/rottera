@@ -4,6 +4,7 @@ import {
   ITEM_TYPES,
   PALETTE_TYPES,
   beamColor,
+  kelvinColor,
   cleanItem,
   cleanLightMap,
   effectiveKelvin,
@@ -67,7 +68,11 @@ describe('technical sheet of the lights', () => {
     expect(effectiveKelvin({ ...newItem('hmi', 1, 1), gel: 'cto' })).toBe(2950)
     expect(effectiveKelvin({ ...tungsten, gel: 'ND 0.6' })).toBe(3200)
     expect(beamColor(tungsten)).not.toBe(beamColor({ ...tungsten, gel: 'CTB' }))
-    expect(beamColor(newItem('moon', 1, 1))).toBe(beamColor(newItem('hmi', 1, 1))) // both cool
+    // both cool: more blue than red
+    for (const t of ['moon', 'hmi'] as const) {
+      const c = beamColor(newItem(t, 1, 1))
+      expect(parseInt(c.slice(5, 7), 16), t).toBeGreaterThan(parseInt(c.slice(1, 3), 16))
+    }
   })
 
   it('numbers the lights in the order they were placed, and only the lights', () => {
@@ -461,5 +466,29 @@ describe('the shelf drawing', () => {
     const part = svg.slice(svg.indexOf(`data-item="${it.id}"`))
     const own = part.slice(0, part.indexOf('</g>'))
     expect((own.match(/<line /g) ?? []).length).toBe(1)
+  })
+})
+
+describe('the colour of a light', () => {
+  it('follows the colour temperature smoothly, from amber to blue', () => {
+    expect(kelvinColor(3200)).toBe('#e07b00')
+    expect(kelvinColor(5600)).toBe('#3d8bd6')
+    const red = (c: string): number => parseInt(c.slice(1, 3), 16)
+    const blue = (c: string): number => parseInt(c.slice(5, 7), 16)
+    // a little cooler, a little less red and more blue
+    expect(red(kelvinColor(4000))).toBeLessThan(red(kelvinColor(3200)))
+    expect(blue(kelvinColor(6500))).toBeGreaterThanOrEqual(blue(kelvinColor(5600)) - 20)
+    expect(kelvinColor(3300)).not.toBe(kelvinColor(3200))
+    expect(kelvinColor(500)).toBe(kelvinColor(1900))
+  })
+
+  it('an RGB light is drawn in its own colour, written on the sheet, and kept in the file', () => {
+    const led = { ...newItem('led', 1, 1), rgb: '#FF0040' }
+    expect(beamColor(led)).toBe('#ff0040')
+    expect(cleanItem(led, 6, 4)?.rgb).toBe('#ff0040')
+    expect(cleanItem({ ...led, rgb: 'vermelho' }, 6, 4)?.rgb).toBeUndefined()
+    expect(cleanItem({ ...newItem('table', 1, 1), rgb: '#ff0040' } as never, 6, 4)?.rgb).toBeUndefined()
+    const row = sheetRows({ ...newLightMap('Sala'), items: [led] }).lights[0]
+    expect(row[LIGHT_COLUMNS.indexOf('Temperatura')]).toBe('RGB #ff0040')
   })
 })
