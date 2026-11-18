@@ -64,6 +64,7 @@ test.describe('F30 light and shadow on the light map (Etapa 1)', () => {
     await add({ type: 'overhead', x: 4.5, y: 1.5, length: 2 })
     await add({ type: 'actor', x: 2, y: 2, label: 'Ana' })
     await add({ type: 'actor', x: 0.4, y: 0.4, label: 'Caio' })
+    await add({ type: 'table', x: 6.6, y: 1.2, length: 0.8, depth: 0.4 })
     await menu(app, 'view-lightmap')
     await page.getByLabel('Luz e sombra').check()
     const surface = page.locator('.lm-surface')
@@ -72,6 +73,7 @@ test.describe('F30 light and shadow on the light map (Etapa 1)', () => {
     await expect(surface.locator('[data-bounce]').first()).toBeAttached()
     await expect(surface.locator('[data-bounce-soft]').first()).toBeAttached()
     await expect(surface.locator('[data-overhead]')).toHaveCount(1)
+    await expect(surface.locator('[data-prop-lit]')).toHaveCount(1)
     await expect(surface.locator('[data-diffused]').first()).toBeAttached()
     // Ana behind the diffuser, Caio in the sun
     await expect(surface.locator('[data-actor-lit]')).toHaveCount(2)

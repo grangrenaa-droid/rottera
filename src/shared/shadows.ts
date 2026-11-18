@@ -64,6 +64,50 @@ export function wallSegments(map: LightMap, opts: { windows?: 'open' | 'closed' 
  */
 export type Pass = 'sharp' | 'soft' | 'cookie'
 
+/** The furniture, seen from above: length across and depth (width) up and down, by default, in metres. */
+const PROPS: Partial<Record<LightItemType, { length: number; depth: number; round?: boolean }>> = {
+  table: { length: 1.2, depth: 0.8 },
+  chair: { length: 0.3, depth: 0.3 },
+  roundtable: { length: 1, depth: 1, round: true },
+  sofa: { length: 2, depth: 0.9 },
+  armchair: { length: 0.9, depth: 0.85 },
+  bed: { length: 1.9, depth: 1.4 },
+  wardrobe: { length: 1.2, depth: 0.6 },
+  counter: { length: 1.8, depth: 0.6 },
+  shelf: { length: 1, depth: 0.35 }
+}
+
+type Placed = { type: LightItemType; x: number; y: number; rotation: number; length?: number; depth?: number }
+
+/** A piece of furniture's outline seen from above, turned with it (a round table is a 16-sided ring); null for anything else. */
+export function propOutline(it: Placed): Pt[] | null {
+  const p = PROPS[it.type]
+  if (!p) return null
+  // a chair is drawn at a fixed size, whatever length it carries
+  const len = it.type === 'chair' ? p.length : it.length ?? p.length
+  const dep = it.type === 'chair' ? p.depth : p.round ? len : it.depth ?? p.depth
+  const local: Pt[] = p.round
+    ? Array.from({ length: 16 }, (_, k) => ({ x: (Math.cos((k * Math.PI) / 8) * len) / 2, y: (Math.sin((k * Math.PI) / 8) * len) / 2 }))
+    : [
+        { x: -len / 2, y: -dep / 2 },
+        { x: len / 2, y: -dep / 2 },
+        { x: len / 2, y: dep / 2 },
+        { x: -len / 2, y: dep / 2 }
+      ]
+  const a = (it.rotation * Math.PI) / 180
+  const c = Math.cos(a)
+  const sn = Math.sin(a)
+  return local.map((q) => ({ x: it.x + q.x * c - q.y * sn, y: it.y + q.x * sn + q.y * c }))
+}
+
+/** The furniture a point stands on (a lamp on a table, an actor on a sofa): those pieces do not hide it. */
+export function propsUnder(map: LightMap, p: Pt): string[] {
+  return map.items.filter((it) => {
+    const o = propOutline(it)
+    return o !== null && insidePolygon(p, o)
+  }).map((it) => it.id)
+}
+
 /** How wide an actor's body is, in metres (the actor's mark on the map). */
 const BODY = 0.47
 
@@ -78,7 +122,7 @@ const MODIFIERS: Partial<Record<LightItemType, { length: number; lets?: Pass }>>
 
 /**
  * What stops one kind of light: the walls (windows let the softened light through) and every modifier standing in
- * the set, except the one that kind of light goes through. `skip` leaves pieces out (a reflector sending light back
+ * the set, except the one that kind of light goes through, and the furniture. `skip` leaves pieces out (a reflector sending light back
  * does not stop its own light). With `towards`, the actors stand in the way too: each body across the way the light
  * comes to it (`towards` says which way that is, for each actor).
  */
@@ -93,6 +137,14 @@ export function blockers(map: LightMap, pass: Pass, skip?: string | string[], to
       if (n < 1e-9) continue
       const half = BODY / 2
       out.push({ x1: it.x - (v.y / n) * half, y1: it.y + (v.x / n) * half, x2: it.x + (v.y / n) * half, y2: it.y - (v.x / n) * half })
+      continue
+    }
+    const outline = propOutline(it)
+    if (outline) {
+      outline.forEach((q, k) => {
+        const r = outline[(k + 1) % outline.length]
+        out.push({ x1: q.x, y1: q.y, x2: r.x, y2: r.y })
+      })
       continue
     }
     const m = MODIFIERS[it.type]

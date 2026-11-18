@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { blockers, insidePolygon, litArea, reflectDirection, sunRotation, sunShadows, wallSegments } from '../src/shared/shadows'
+import { blockers, insidePolygon, litArea, propOutline, reflectDirection, sunRotation, sunShadows, wallSegments } from '../src/shared/shadows'
 import { cleanLightMap, lightMapSvg, newItem, newLightMap } from '../src/shared/lightmap'
 import type { LightMap } from '../src/shared/types'
 
@@ -271,5 +271,52 @@ describe('the actor in the light (Etapa 3, ajustes)', () => {
     // an actor behind the lamp, out of its beam, gets only the bounce's light
     const back = svgOf([bounce, { ...lamp, rotation: 0 }, { ...ana, x: 5.2, y: 4.2 }])
     expect(back).toContain('data-actor-lit="ana"')
+  })
+})
+
+describe('set pieces in the light (Etapa 3, ajustes)', () => {
+  const lamp = { ...newItem('fresnel', 4, 5), id: 'luz', rotation: 0, range: 4 }
+  const mesa = { ...newItem('table', 4, 3), id: 'mesa', length: 1.2, depth: 0.4 }
+  const svgOf = (items: LightMap['items']): string => lightMapSvg({ ...newLightMap('Sala'), id: 'sala', width: 8, height: 6, shadows: true, items })
+  const polygonOf = (svg: string, attr: string): { x: number; y: number }[] =>
+    /points="([^"]+)"/.exec(svg.slice(svg.indexOf(attr)))![1].split(' ').map((p) => {
+      const [x, y] = p.split(',').map(Number)
+      return { x: x / 60, y: y / 60 }
+    })
+
+  it('a piece of furniture is its outline seen from above, turned with it', () => {
+    const corners = propOutline({ ...newItem('table', 2, 2), length: 1.2, depth: 0.8 })!
+    expect(corners.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).sort()).toEqual(['1.40,1.60', '1.40,2.40', '2.60,1.60', '2.60,2.40'])
+    const turned = propOutline({ ...newItem('table', 2, 2), length: 1.2, depth: 0.8, rotation: 90 })!
+    expect(Math.max(...turned.map((p) => p.y)) - Math.min(...turned.map((p) => p.y))).toBeCloseTo(1.2)
+    expect(propOutline({ ...newItem('roundtable', 2, 2), length: 1 })!.length).toBeGreaterThanOrEqual(12)
+    expect(propOutline(newItem('chair', 2, 2))!.length).toBe(4)
+    expect(propOutline(newItem('wall', 2, 2))).toBeNull()
+  })
+
+  it('furniture stops the light: its outline is in the way of every light', () => {
+    const map = { ...newLightMap('x'), items: [mesa] }
+    for (const pass of ['sharp', 'soft', 'cookie'] as const) expect(blockers(map, pass)).toHaveLength(4)
+  })
+
+  it('a table in a beam casts a shadow behind', () => {
+    const area = polygonOf(svgOf([mesa, lamp]), 'data-lit="luz"')
+    expect(insidePolygon({ x: 4, y: 3.5 }, area)).toBe(true)
+    expect(insidePolygon({ x: 4, y: 2 }, area)).toBe(false)
+  })
+
+  it('a lamp standing on a table still lights the room, and an actor sitting on a sofa still gets the light', () => {
+    const abajur = { ...newItem('practical', 4, 3), id: 'abajur' }
+    expect(insidePolygon({ x: 4, y: 2 }, polygonOf(svgOf([mesa, abajur]), 'data-lit="abajur"'))).toBe(true)
+    const sofa = { ...newItem('sofa', 4, 3), id: 'sofa' }
+    const ana = { ...newItem('actor', 4, 3), id: 'ana' }
+    expect(svgOf([sofa, ana, lamp])).toContain('data-actor-lit="ana"')
+  })
+
+  it('a piece shows the sides the light gets to, or is darkened when none does', () => {
+    const lit = svgOf([mesa, lamp])
+    expect(lit).toContain('data-prop-lit="mesa"')
+    expect(lit).not.toContain('data-prop-dark')
+    expect(svgOf([{ ...mesa, x: 7, y: 1 }, lamp])).toContain('data-prop-dark="mesa"')
   })
 })
