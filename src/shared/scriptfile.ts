@@ -1,6 +1,6 @@
 import type { Block, Frame, Kind, Script, ScriptFile, StoryboardAspect, StoryboardLayout } from './types'
 import { KINDS } from './elements'
-import { cleanFrame } from './storyboard'
+import { cleanFrame, cleanReferences } from './storyboard'
 import { cleanLightMap } from './lightmap'
 import { cleanSheet } from './characters'
 import type { CharacterSheet } from './types'
@@ -86,6 +86,8 @@ export function parseScriptFile(raw: string): Script {
       layout: (layouts.includes(sb.layout) ? sb.layout : 6) as StoryboardLayout,
       includeInPdf: sb.includeInPdf !== false
     }
+    const refs = cleanReferences(sb.references)
+    if (refs.length) script.storyboard.references = refs
   }
   if (Array.isArray(src.characters)) {
     script.characters = src.characters

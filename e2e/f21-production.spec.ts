@@ -222,7 +222,7 @@ test.describe('F21 breakdown, shooting plan and scene links', () => {
     expect(JSON.stringify(frames.result)).toContain('"scene":"1"')
 
     await rua.getByRole('button', { name: /^Storyboard da cena 1/ }).click()
-    await expect(page.locator('.seg button[aria-pressed="true"]')).toHaveText('Storyboard')
+    await expect(page.locator('.toolbar .seg button[aria-pressed="true"]')).toHaveText('Storyboard')
     await expect(page.getByLabel('Cena do quadro 1')).toHaveValue('1')
 
     // the breakdown shows them too

@@ -1,4 +1,4 @@
-import type { Frame, Paper, Storyboard, StoryboardAspect, StoryboardLayout } from './types'
+import type { Frame, Paper, Reference, ReferenceKind, Storyboard, StoryboardAspect, StoryboardLayout } from './types'
 import { PAPER } from './paginate'
 
 export const ASPECTS: { id: StoryboardAspect; label: string; ratio: number }[] = [
@@ -165,4 +165,35 @@ export function placeInScene(frames: Frame[], id: string, scene: string, order: 
 /** Approximate size of the stored pictures, in megabytes. */
 export function storyboardMegabytes(frames: Frame[]): number {
   return frames.reduce((n, f) => n + (f.image.length * 3) / 4, 0) / (1024 * 1024)
+}
+
+/** What a reference image is for. */
+export const REFERENCE_KINDS: Record<ReferenceKind, string> = {
+  light: 'Luz',
+  color: 'Cor',
+  wardrobe: 'Figurino',
+  location: 'Locação',
+  framing: 'Enquadramento',
+  other: 'Outro'
+}
+
+/** The reference images as the file brings them: only real pictures, at most 300. */
+export function cleanReferences(raw: unknown): Reference[] {
+  if (!Array.isArray(raw)) return []
+  const out: Reference[] = []
+  for (const x of raw) {
+    if (out.length >= 300) break
+    if (!x || typeof x !== 'object') continue
+    const r = x as Record<string, unknown>
+    if (typeof r.id !== 'string' || !r.id || r.id.length > 64) continue
+    if (typeof r.image !== 'string' || !r.image || !isSafeImage(r.image)) continue
+    out.push({
+      id: r.id,
+      image: r.image,
+      caption: typeof r.caption === 'string' ? r.caption.slice(0, 600) : '',
+      kind: typeof r.kind === 'string' && r.kind in REFERENCE_KINDS ? (r.kind as ReferenceKind) : 'other',
+      scenes: Array.isArray(r.scenes) ? r.scenes.filter((s): s is string => typeof s === 'string' && s.length > 0 && s.length <= 64).slice(0, 500) : []
+    })
+  }
+  return out
 }

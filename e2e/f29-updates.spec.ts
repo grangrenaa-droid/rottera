@@ -72,6 +72,35 @@ async function clickWord(page: Page, kind: string, word: string): Promise<void> 
 }
 
 test.describe('F29 updates of 17/11', () => {
+  test('F29-H8 the storyboard has reference images, by kind and by scene', async ({ app, page, dialogs }) => {
+    const dir = await open(page, dialogs)
+    const pic = join(dir, 'ref.png')
+    writeFileSync(pic, PNG_1PX)
+    await menu(app, 'view-storyboard')
+    const tabs = page.getByRole('group', { name: 'Storyboard' })
+    await expect(tabs.getByRole('button', { name: 'Quadros' })).toHaveAttribute('aria-pressed', 'true')
+    await tabs.getByRole('button', { name: 'Referências' }).click()
+    await page.getByLabel('Escolher imagens de referência').setInputFiles(pic)
+    const card = page.locator('.ref-card').first()
+    await expect(card.getByRole('img')).toBeVisible()
+    await card.getByLabel('Legenda da referência 1').fill('Luz dura de fim de tarde')
+    await card.getByLabel('Tipo da referência 1').selectOption('light')
+    await card.getByText('Cenas:').click()
+    await card.getByRole('checkbox', { name: /COZINHA/ }).check()
+
+    const byScene = page.getByLabel('Filtrar por cena')
+    const byKind = page.getByLabel('Filtrar por tipo')
+    await byScene.selectOption({ label: '2 · EXT. RUA - NOITE' })
+    await expect(page.locator('.ref-card')).toHaveCount(0)
+    await byScene.selectOption({ label: '1 · INT. COZINHA - DIA' })
+    await expect(page.locator('.ref-card')).toHaveCount(1)
+    await byKind.selectOption('color')
+    await expect(page.locator('.ref-card')).toHaveCount(0)
+
+    const saved = await saveAs(app, page, dialogs, join(dir, 'refs.rottera'))
+    expect(saved.storyboard.references).toEqual([expect.objectContaining({ caption: 'Luz dura de fim de tarde', kind: 'light', scenes: [expect.any(String)] })])
+  })
+
   test('F29-H7 the cast list: an actor plays a character, cannot come one day, and the plan says so', async ({ app, page, dialogs }) => {
     const dir = await open(page, dialogs)
     await menu(app, 'view-shooting')

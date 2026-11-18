@@ -102,6 +102,21 @@ export interface Storyboard {
   layout: StoryboardLayout
   /** Append the storyboard pages to the script PDF. */
   includeInPdf: boolean
+  /** Reference images (mood, colour, wardrobe…), linked to scenes by id; the Referências tab. */
+  references?: Reference[]
+}
+
+export type ReferenceKind = 'light' | 'color' | 'wardrobe' | 'location' | 'framing' | 'other'
+
+/** A reference image of the Storyboard window. */
+export interface Reference {
+  id: string
+  /** data:image/... URL, already downscaled by the app. */
+  image: string
+  caption: string
+  kind: ReferenceKind
+  /** The scenes it is for (scene ids); none = the whole film. */
+  scenes: string[]
 }
 
 export type LightItemType =

@@ -31,7 +31,7 @@ const today = (): string => {
 import type { Template } from '../shared/templates'
 import { Editor, ELEMENT_OPTIONS, type CaretInfo, type EditorHandle } from './Editor'
 import { BoardView } from './Board'
-import { StoryboardView } from './Storyboard'
+import { StoryboardWindow } from './StoryboardWindow'
 import { ScriptPage } from './ScriptPage'
 import { LightView } from './Light'
 import { daySun, daySunLine, emptyLighting } from '../shared/lighting'
@@ -1287,7 +1287,7 @@ export function App(): JSX.Element {
   }, [panel])
 
   const shootingScenes = useMemo(
-    () => (panel === 'shooting' || panel === 'sound' || panel === 'lightmap' ? sceneInfo({ blocks, paper, scenesLocked }, pagination) : []),
+    () => (panel === 'shooting' || panel === 'sound' || panel === 'lightmap' || panel === 'storyboard' ? sceneInfo({ blocks, paper, scenesLocked }, pagination) : []),
     [panel, blocks, paper, scenesLocked, pagination]
   )
   const sceneIdsOf = useCallback((list: { id: string | null; index: number }[]) => {
@@ -1703,9 +1703,12 @@ export function App(): JSX.Element {
             />
           )}
           {panel === 'storyboard' && (
-            <StoryboardView
+            <StoryboardWindow
+              key={jump.scene ?? ''}
               storyboard={storyboard}
-              scenes={scenes.map((sc) => ({ number: sc.number, text: sc.text }))}
+              frameScenes={scenes.map((sc) => ({ number: sc.number, text: sc.text }))}
+              scenes={shootingScenes}
+              sceneId={sceneIdOf}
               onChange={setStoryboard}
               onExport={() => void doExport('storyboard-pdf')}
               flash={flash}
