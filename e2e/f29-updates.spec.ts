@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ElectronApplication, Page } from '@playwright/test'
-import { expect, menu, test, type Dialogs } from './fixtures'
+import { axeViolations, expect, menu, setTheme, test, type Dialogs } from './fixtures'
 
 test.afterEach(({ errors }) => {
   expect(errors, 'console or page errors').toEqual([])
@@ -72,6 +72,36 @@ async function clickWord(page: Page, kind: string, word: string): Promise<void> 
 }
 
 test.describe('F29 updates of 17/11', () => {
+  test('F29-A1 the new screens have no serious accessibility violations, light and dark', async ({ app, page, dialogs }) => {
+    await open(page, dialogs)
+    const found: string[] = []
+    for (const theme of ['light', 'night'] as const) {
+      await setTheme(app, page, theme)
+      await menu(app, 'view-script')
+      await clickWord(page, 'character', 'MARINA')
+      for (const v of await axeViolations(page)) found.push(`${theme}/personagem: ${v}`)
+      await clickWord(page, 'scene_heading', 'COZINHA')
+      for (const v of await axeViolations(page)) found.push(`${theme}/locação lateral: ${v}`)
+      await menu(app, 'view-shooting')
+      const tabs = page.getByRole('group', { name: 'Filmagem' })
+      await tabs.getByRole('button', { name: 'Locações' }).click()
+      for (const v of await axeViolations(page)) found.push(`${theme}/locações: ${v}`)
+      await tabs.getByRole('button', { name: 'Elenco' }).click()
+      if (theme === 'light') await page.getByRole('button', { name: '+ Pessoa' }).click()
+      for (const v of await axeViolations(page)) found.push(`${theme}/elenco: ${v}`)
+      await tabs.getByRole('button', { name: 'Plano de filmagem' }).click()
+      if (theme === 'light') {
+        await page.getByRole('button', { name: 'Novo dia' }).click()
+        await page.getByRole('button', { name: '+ Pausa' }).click()
+      }
+      for (const v of await axeViolations(page)) found.push(`${theme}/plano: ${v}`)
+      await menu(app, 'view-storyboard')
+      await page.getByRole('group', { name: 'Storyboard' }).getByRole('button', { name: 'Referências' }).click()
+      for (const v of await axeViolations(page)) found.push(`${theme}/referências: ${v}`)
+    }
+    expect(found).toEqual([])
+  })
+
   test('F29-H8 the storyboard has reference images, by kind and by scene', async ({ app, page, dialogs }) => {
     const dir = await open(page, dialogs)
     const pic = join(dir, 'ref.png')

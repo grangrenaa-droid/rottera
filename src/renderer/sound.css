@@ -42,6 +42,7 @@
 /* the sheet per scene: the scene list (as in the breakdown) and the sheet */
 .snd-sheets { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 24px; align-items: start; }
 .snd-sheets .prod-scenes small { grid-column: 2; color: #7c3aed; font-size: 12px; }
+:root[data-theme="night"] .snd-sheets .prod-scenes small, :root[data-theme="midnight"] .snd-sheets .prod-scenes small { color: #c4b5fd; }
 .snd-sheet { display: grid; gap: 12px; max-width: 760px; }
 .snd-sheet-head { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
 .snd-sheet-head h2 { margin: 0; font-size: 18px; }
