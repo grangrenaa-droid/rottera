@@ -76,3 +76,14 @@ describe('light and shadow on the drawing', () => {
     expect(cleanLightMap(JSON.parse(JSON.stringify({ ...map(true), shadows: 'sim' })))?.shadows).toBeUndefined()
   })
 })
+
+describe('the sun when it turns', () => {
+  it('gets a new mask, so two drawings or an old one on screen never keep the shadow of another direction', () => {
+    const at = (rotation: number): string => {
+      const svg = lightMapSvg({ ...newLightMap('Sala'), id: 'sala', shadows: true, items: [wall(4, 2, 4), { ...newItem('sun', 1, 1), id: 'sol', rotation }] })
+      return /<mask id="([^"]+)"/.exec(svg)?.[1] ?? ''
+    }
+    expect(at(135)).not.toBe(at(225))
+    expect(at(135)).toBe(at(135))
+  })
+})

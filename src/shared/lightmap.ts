@@ -1196,7 +1196,11 @@ function lightAndShadowSvg(map: LightMap): string {
     const color = beamColor(it)
     if (it.type === 'sun' || it.type === 'moon') {
       const shadows = sunShadows(it.rotation, walls, map.width, map.height)
-      const mask = `ls-sun-${key(map.id)}-${key(it.id)}`
+      // the mask's name carries what it cuts: a sun turned (or a wall moved) gets a new one, so the screen never keeps
+      // an old shadow, and two drawings of the same map side by side keep their own
+      let h = 5381
+      for (const c of `${it.rotation}|${shadows.map(pts).join('|')}`) h = ((h << 5) + h + c.charCodeAt(0)) | 0
+      const mask = `ls-sun-${key(map.id)}-${key(it.id)}-${(h >>> 0).toString(36)}`
       out +=
         `<g data-sun="${escapeXml(it.id)}" clip-path="url(#${clip})" pointer-events="none">` +
         `<mask id="${mask}"><rect x="0" y="0" width="${W}" height="${H}" fill="#ffffff"/>${shadows.map((q) => `<polygon points="${pts(q)}" fill="#000000"/>`).join('')}</mask>` +
