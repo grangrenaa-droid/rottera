@@ -80,3 +80,9 @@ describe('the sound plan drawing', () => {
     expect(svg).not.toContain('Luísa')
   })
 })
+
+describe('the sound plan under a map with light and shadow', () => {
+  it('draws the map without its light and shadow: the microphones do not need it', () => {
+    expect(soundPlanSvg(plan, { ...map, shadows: true })).not.toContain('light-and-shadow')
+  })
+})

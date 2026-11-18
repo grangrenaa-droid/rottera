@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { blockers, insidePolygon, litArea, propOutline, reflectDirection, sunRotation, sunShadows, wallSegments } from '../src/shared/shadows'
+import { blockers, insidePolygon, litArea, propOutline, reaches, reflectDirection, sunReaches, sunRotation, sunShadows, wallSegments } from '../src/shared/shadows'
 import { cleanLightMap, lightMapSvg, newItem, newLightMap } from '../src/shared/lightmap'
 import type { LightMap } from '../src/shared/types'
 
@@ -318,5 +318,45 @@ describe('set pieces in the light (Etapa 3, ajustes)', () => {
     expect(lit).toContain('data-prop-lit="mesa"')
     expect(lit).not.toContain('data-prop-dark')
     expect(svgOf([{ ...mesa, x: 7, y: 1 }, lamp])).toContain('data-prop-dark="mesa"')
+  })
+})
+
+describe('finishing (Etapa 4)', () => {
+  it('a beam reaches a point when it is in its opening and reach and nothing stands between', () => {
+    const b = { x: 4, y: 5, rotation: 0, spread: 35, range: 4 }
+    expect(reaches(b, { x: 4, y: 3 }, [])).toBe(true)
+    expect(reaches(b, { x: 4, y: 0.5 }, [])).toBe(false)
+    expect(reaches(b, { x: 6, y: 3 }, [])).toBe(false)
+    expect(reaches(b, { x: 4, y: 3 }, [{ x1: 3, y1: 4, x2: 5, y2: 4 }])).toBe(false)
+    expect(reaches({ ...b, spread: 360, range: 2 }, { x: 5.5, y: 5.5 }, [])).toBe(true)
+    // the beam starts ahead of the piece when it says so
+    expect(reaches({ ...b, from: 1 }, { x: 4, y: 0.5 }, [])).toBe(true)
+  })
+
+  it('the sun reaches a point when nothing stands between it and the sun', () => {
+    // pointing up: the light comes from the bottom
+    const wall = { x1: 3, y1: 2, x2: 5, y2: 2 }
+    expect(sunReaches(0, { x: 4, y: 1 }, [wall])).toBe(false)
+    expect(sunReaches(0, { x: 4, y: 3 }, [wall])).toBe(true)
+  })
+
+  it('a busy map (12 lights, 8 actors, 12 pieces of furniture, walls and modifiers) is drawn fast enough to drag', () => {
+    const it2 = (type: Parameters<typeof newItem>[0], x: number, y: number, extra: Record<string, unknown> = {}) => ({ ...newItem(type, x, y), ...extra })
+    const items: LightMap['items'] = [
+      it2('wall', 7.5, 0.1, { length: 15 }), it2('wall', 0.1, 5, { length: 10, rotation: 90 }), it2('wall', 14.9, 5, { length: 10, rotation: 90 }),
+      it2('wall', 5, 5, { length: 4, rotation: 90 }), it2('wall', 10, 4, { length: 3 }), it2('wall', 3, 7, { length: 4 }), it2('wall', 12, 8, { length: 4, rotation: 90 }),
+      it2('door', 5, 4.5), it2('door', 10, 4), it2('window', 7.5, 0.1, { length: 1.5 }), it2('window', 0.1, 6), it2('sun', 14, 0.5)
+    ]
+    const kinds = ['fresnel', 'led', 'hmi', 'softbox', 'par', 'kino', 'skypanel', 'dedo', 'tube', 'ellipsoidal', 'chinaball', 'practical'] as const
+    kinds.forEach((k, i) => items.push(it2(k, 1 + (i % 6) * 2.3, 2 + Math.floor(i / 6) * 6, { rotation: (i * 47) % 360, range: 4 })))
+    for (let i = 0; i < 8; i++) items.push(it2('actor', 2 + i * 1.5, 4.5 + (i % 3)))
+    const props = ['table', 'chair', 'roundtable', 'sofa', 'armchair', 'bed', 'wardrobe', 'counter', 'shelf', 'chair', 'chair', 'table'] as const
+    props.forEach((p, i) => items.push(it2(p, 1.5 + (i % 6) * 2.2, 3.4 + Math.floor(i / 6) * 4)))
+    ;(['flag', 'diffuser', 'reflector', 'bounce', 'cookie', 'overhead'] as const).forEach((m, i) => items.push(it2(m, 3 + i * 1.6, 2.5 + (i % 2) * 3, { rotation: 30 })))
+    const map = { ...newLightMap('x'), id: 'x', width: 15, height: 10, shadows: true, items }
+    lightMapSvg(map)
+    const t0 = performance.now()
+    for (let k = 0; k < 3; k++) lightMapSvg(map, { interactive: true })
+    expect((performance.now() - t0) / 3).toBeLessThan(40)
   })
 })

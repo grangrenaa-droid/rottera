@@ -1,6 +1,6 @@
 import type { LightItem, LightItemType, LightMap, LightRole, MoveStop, SensorId } from './types'
 import { newId } from './structures'
-import { blockers, diffusedBeam, insidePolygon, litArea, pointing, propOutline, propsUnder, reflectedBeam, sunRotation, sunShadows, type Beam as ShadowBeam, type Pt as ShadowPt, type Segment as ShadowSegment } from './shadows'
+import { blockers, diffusedBeam, litArea, pointing, propOutline, propsUnder, reaches, reflectedBeam, sunReaches, sunRotation, sunShadows, type Beam as ShadowBeam, type Pt as ShadowPt, type Segment as ShadowSegment } from './shadows'
 
 /** Pixels per metre in the drawing's own coordinate system. */
 export const S = 60
@@ -1265,7 +1265,7 @@ function lightAndShadowSvg(map: LightMap): { under: string; over: string } {
   // the actors a beam from `o` reaches (each actor's own body left out, so it does not hide itself)
   const beamOnActors = (beam: ShadowBeam, o: ShadowPt, color: string, soft: boolean, skip: string[] = []): void => {
     for (const a of actors) {
-      if (insidePolygon(a, litArea(beam, blockers(map, 'sharp', [...skip, a.id, ...propsUnder(map, a)], awayFrom(o))))) lights(a, { x: o.x - a.x, y: o.y - a.y }, color, soft)
+      if (reaches(beam, a, blockers(map, 'sharp', [...skip, a.id, ...propsUnder(map, a)], awayFrom(o)))) lights(a, { x: o.x - a.x, y: o.y - a.y }, color, soft)
     }
   }
   // light the modifiers pass on: reflectors and bounces send it back, diffusers spread it on, softened. `incoming`
@@ -1276,8 +1276,9 @@ function lightAndShadowSvg(map: LightMap): { under: string; over: string } {
       const inc = incoming(m)
       if (!inc) continue
       const beam = m.type === 'diffuser' ? diffusedBeam(m, inc.dir, inc.range) : reflectedBeam(m, inc.dir, inc.range)
-      const area = litArea(beam, blockers(map, 'sharp', [m.id, ...propsUnder(map, m)], awayFrom(m)))
-      lightsProps(color, (p) => (insidePolygon(p, area) ? (m.type === 'reflector' ? 'sharp' : 'soft') : null))
+      const walls = blockers(map, 'sharp', [m.id, ...propsUnder(map, m)], awayFrom(m))
+      const area = litArea(beam, walls)
+      lightsProps(color, (p) => (reaches(beam, p, walls) ? (m.type === 'reflector' ? 'sharp' : 'soft') : null))
       const id = escapeXml(m.id)
       if (m.type === 'reflector') {
         s += `<polygon data-bounce="${id}" points="${pts(area)}" fill="${color}" fill-opacity="0.18" stroke="${color}" stroke-width="1" stroke-dasharray="2 3"/>`
@@ -1309,8 +1310,8 @@ function lightAndShadowSvg(map: LightMap): { under: string; over: string } {
       const towards = sunRotation(it, map.width, map.height)
       const dir = pointing(towards)
       const along = (): ShadowPt => dir
-      const shade = (pass: 'sharp' | 'soft' | 'cookie', skip?: string[]): ShadowPt[][] =>
-        sunShadows(towards, blockers(map, pass, skip, along), map.width, map.height)
+      const sunBlock = (pass: 'sharp' | 'soft' | 'cookie', skip?: string[]): ShadowSegment[] => blockers(map, pass, skip, along)
+      const shade = (pass: 'sharp' | 'soft' | 'cookie'): ShadowPt[][] => sunShadows(towards, sunBlock(pass), map.width, map.height)
       // full sun stops at everything; softened light gets through windows and diffusers, patches through a cucoloris;
       // the shadow proper is where none of them gets
       const shadows = shade('sharp')
@@ -1320,13 +1321,15 @@ function lightAndShadowSvg(map: LightMap): { under: string; over: string } {
       // an old shadow, and two drawings of the same map side by side keep their own
       const id = `${key(map.id)}-${key(it.id)}-${hash(`${towards}|${[shadows, soft, patch].map((l) => l.map(pts).join('|')).join('#')}`)}`
       const inSun = (p: { x: number; y: number }, pass: 'sharp' | 'soft' | 'cookie', skip: string): boolean =>
-        !shade(pass, [skip, ...propsUnder(map, p)]).some((q) => insidePolygon(p, q))
+        sunReaches(towards, p, sunBlock(pass, [skip, ...propsUnder(map, p)]))
       for (const a of actors) {
         if (inSun(a, 'sharp', a.id)) lights(a, { x: -dir.x, y: -dir.y }, color, false)
         else if ((softened && inSun(a, 'soft', a.id)) || (patterned && inSun(a, 'cookie', a.id))) lights(a, { x: -dir.x, y: -dir.y }, color, true)
       }
-      const outOf = (list: ShadowPt[][], p: ShadowPt): boolean => !list.some((q) => insidePolygon(p, q))
-      lightsProps(color, (p) => (outOf(shadows, p) ? 'sharp' : (softened && outOf(soft, p)) || (patterned && outOf(patch, p)) ? 'soft' : null))
+      const [sharpB, softB, cookieB] = [sunBlock('sharp'), sunBlock('soft'), sunBlock('cookie')]
+      lightsProps(color, (p) =>
+        sunReaches(towards, p, sharpB) ? 'sharp' : (softened && sunReaches(towards, p, softB)) || (patterned && sunReaches(towards, p, cookieB)) ? 'soft' : null
+      )
       out +=
         `<g data-sun="${escapeXml(it.id)}" clip-path="url(#${clip})" pointer-events="none">` +
         `<mask id="ls-sun-${id}"><rect x="0" y="0" width="${W}" height="${H}" fill="#ffffff"/>${poly(shadows, '#000000')}</mask>` +
@@ -1359,11 +1362,12 @@ function lightAndShadowSvg(map: LightMap): { under: string; over: string } {
     // a lamp standing on a table is not hidden by it
     const under = propsUnder(map, o)
     const pass = (p: 'sharp' | 'soft' | 'cookie', skip: string[] = []): ShadowSegment[] => blockers(map, p, [...under, ...skip], awayFrom(o))
-    const area = litArea(beam, pass('sharp'))
-    const softArea = softened ? litArea(beam, pass('soft')) : area
-    const cookieArea = patterned ? litArea(beam, pass('cookie')) : area
+    const [sharpB, softB, cookieB] = [pass('sharp'), pass('soft'), pass('cookie')]
+    const area = litArea(beam, sharpB)
+    const softArea = softened ? litArea(beam, softB) : area
+    const cookieArea = patterned ? litArea(beam, cookieB) : area
     lightsProps(color, (p) =>
-      insidePolygon(p, area) ? (it.type === 'chinaball' ? 'soft' : 'sharp') : insidePolygon(p, softArea) || insidePolygon(p, cookieArea) ? 'soft' : null
+      reaches(beam, p, sharpB) ? (it.type === 'chinaball' ? 'soft' : 'sharp') : (softened && reaches(beam, p, softB)) || (patterned && reaches(beam, p, cookieB)) ? 'soft' : null
     )
     if (softened) {
       // what gets through windows and diffusers: the same beam with them open, softened, under the sharp one
@@ -1389,13 +1393,13 @@ function lightAndShadowSvg(map: LightMap): { under: string; over: string } {
       `stroke="${color}" stroke-width="1" stroke-dasharray="5 4" pointer-events="none"/>`
     // the actors it reaches: in the full light, or only in the softened or patterned one
     for (const a of actors) {
-      const on = (p: 'sharp' | 'soft' | 'cookie'): boolean => insidePolygon(a, litArea(beam, pass(p, [a.id, ...propsUnder(map, a)])))
+      const on = (p: 'sharp' | 'soft' | 'cookie'): boolean => reaches(beam, a, pass(p, [a.id, ...propsUnder(map, a)]))
       if (on('sharp')) lights(a, { x: o.x - a.x, y: o.y - a.y }, color, round !== undefined && it.type === 'chinaball')
       else if ((softened && on('soft')) || (patterned && on('cookie'))) lights(a, { x: o.x - a.x, y: o.y - a.y }, color, true)
     }
     // a reflector, bounce or diffuser the full light reaches passes it on, with the reach the light has left
     const back = passedOn(color, (m) => {
-      if (!insidePolygon(m, litArea(beam, pass('sharp', [m.id, ...propsUnder(map, m)])))) return null
+      if (!reaches(beam, m, pass('sharp', [m.id, ...propsUnder(map, m)]))) return null
       const dist = Math.hypot(m.x - o.x, m.y - o.y)
       if (dist < 1e-6) return null
       return { dir: { x: (m.x - o.x) / dist, y: (m.y - o.y) / dist }, range: Math.max(1, beam.range - dist) }

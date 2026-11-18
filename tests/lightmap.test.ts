@@ -143,3 +143,17 @@ describe('PDF order', () => {
     expect(html).not.toContain('STORYBOARD')
   })
 })
+
+describe('the PDF of a map with light and shadow', () => {
+  it('prints the light and shadow when the map has it on', () => {
+    const lit = { ...newLightMap('Sala', '1'), includeInPdf: true, shadows: true, items: [{ ...newItem('fresnel', 2, 3), id: 'l1' }] }
+    const base = { ...newLightMap('Sala', '1'), includeInPdf: true, items: [{ ...newItem('fresnel', 2, 3), id: 'l1' }] }
+    const scriptWith = (m: LightMap): Script => ({
+      titlePage: { title: 'Sala', author: '', contact: '' },
+      blocks: [{ kind: 'scene_heading', text: 'INT. SALA - DIA' }],
+      lightMaps: [m]
+    })
+    expect(buildPdfHtml(scriptWith(lit))).toContain('data-lit="l1"')
+    expect(buildPdfHtml(scriptWith(base))).not.toContain('data-lit')
+  })
+})

@@ -79,7 +79,8 @@ export function soundPlanSvg(plan: SoundPlan, map: LightMap | null, opts: { sele
   const H = h * S
   let below: string
   if (map) {
-    const inner = lightMapSvg(map).replace(/^<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '')
+    // the map's light and shadow is for the lighting crew: the microphones do not need it
+    const inner = lightMapSvg({ ...map, shadows: false }).replace(/^<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '')
     below = `<g opacity="0.35" pointer-events="none">${inner}</g>`
   } else {
     const lines: string[] = []

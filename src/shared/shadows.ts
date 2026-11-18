@@ -231,9 +231,11 @@ export interface Beam {
  * The area a light reaches: rays across its opening, one per degree and a few grazing each wall's ends, each going as
  * far as its reach or the first wall. The points go round the area, starting at the light (unless it shines all round).
  */
-export function litArea(b: Beam, walls: Segment[]): Pt[] {
+export function litArea(b: Beam, all: Segment[]): Pt[] {
   const dir = pointing(b.rotation)
   const o = { x: b.x + dir.x * (b.from ?? 0), y: b.y + dir.y * (b.from ?? 0) }
+  // only what is within reach can stop a ray
+  const walls = all.filter((s) => distanceTo(o, s) <= b.range)
   const round = b.spread >= 359.5
   const half = round ? Math.PI : (b.spread / 2) * (Math.PI / 180)
   const a0 = Math.atan2(dir.y, dir.x)
@@ -253,10 +255,54 @@ export function litArea(b: Beam, walls: Segment[]): Pt[] {
   angles.sort((x, y) => x - y)
   const pts = angles.map((d) => {
     const v = { x: Math.cos(a0 + d), y: Math.sin(a0 + d) }
-    const t = Math.min(b.range, ...walls.map((s) => hit(o, v, s)))
+    let t = b.range
+    for (const s of walls) {
+      const h = hit(o, v, s)
+      if (h < t) t = h
+    }
     return { x: o.x + v.x * t, y: o.y + v.y * t }
   })
   return round ? pts : [o, ...pts]
+}
+
+/** How far a point is from a segment. */
+function distanceTo(p: Pt, s: Segment): number {
+  const wx = s.x2 - s.x1
+  const wy = s.y2 - s.y1
+  const len2 = wx * wx + wy * wy
+  const t = len2 < 1e-12 ? 0 : Math.max(0, Math.min(1, ((p.x - s.x1) * wx + (p.y - s.y1) * wy) / len2))
+  return Math.hypot(p.x - (s.x1 + t * wx), p.y - (s.y1 + t * wy))
+}
+
+/** Whether nothing stands on the way from `o` to `p`. */
+function clear(o: Pt, p: Pt, walls: Segment[]): boolean {
+  const dist = Math.hypot(p.x - o.x, p.y - o.y)
+  if (dist < 1e-9) return true
+  const v = { x: (p.x - o.x) / dist, y: (p.y - o.y) / dist }
+  return walls.every((s) => hit(o, v, s) >= dist - 1e-9)
+}
+
+/**
+ * Whether a beam gets to a point: within its reach and opening, with nothing in the way (one ray, the same answer
+ * as being inside its lit area, for much less work).
+ */
+export function reaches(b: Beam, p: Pt, walls: Segment[]): boolean {
+  const dir = pointing(b.rotation)
+  const o = { x: b.x + dir.x * (b.from ?? 0), y: b.y + dir.y * (b.from ?? 0) }
+  const dist = Math.hypot(p.x - o.x, p.y - o.y)
+  if (dist > b.range) return false
+  if (b.spread < 359.5 && dist > 1e-9) {
+    const off = Math.abs(wrap(Math.atan2(p.y - o.y, p.x - o.x) - Math.atan2(dir.y, dir.x)))
+    if (off > (b.spread / 2) * (Math.PI / 180) + 1e-9) return false
+  }
+  return clear(o, p, walls)
+}
+
+/** Whether the sun (or the moon) pointing `rotation` gets to a point: nothing between it and the sun's side. */
+export function sunReaches(rotation: number, p: Pt, walls: Segment[]): boolean {
+  const d = pointing(rotation)
+  const back = { x: -d.x, y: -d.y }
+  return walls.every((s) => hit(p, back, s) === Infinity)
 }
 
 /**
