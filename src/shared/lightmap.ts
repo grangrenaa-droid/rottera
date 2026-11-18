@@ -53,6 +53,13 @@ export const ITEM_DEFS: Record<LightItemType, ItemDef> = {
   dolly: { name: 'Trilho / dolly', group: 'Set e energia', length: 3, hint: 'Movimento de câmera', retired: true },
   table: { name: 'Mesa', group: 'Cenário', length: 1.2, depth: 0.8, hint: 'Móvel, com comprimento e largura' },
   chair: { name: 'Cadeira', group: 'Cenário', hint: 'Móvel' },
+  roundtable: { name: 'Mesa redonda', group: 'Cenário', length: 1, hint: 'Móvel; o comprimento é o diâmetro' },
+  sofa: { name: 'Sofá', group: 'Cenário', length: 2, depth: 0.9, hint: 'Móvel, encosto no lado de cima' },
+  armchair: { name: 'Poltrona', group: 'Cenário', length: 0.9, depth: 0.85, hint: 'Móvel, encosto no lado de cima' },
+  bed: { name: 'Cama', group: 'Cenário', length: 1.9, depth: 1.4, hint: 'Móvel, cabeceira à esquerda' },
+  wardrobe: { name: 'Armário', group: 'Cenário', length: 1.2, depth: 0.6, hint: 'Móvel, portas embaixo' },
+  counter: { name: 'Bancada', group: 'Cenário', length: 1.8, depth: 0.6, hint: 'Balcão ou bancada de cozinha' },
+  shelf: { name: 'Estante', group: 'Cenário', length: 1, depth: 0.35, hint: 'Estante ou prateleira' },
   door: { name: 'Porta', group: 'Cenário', length: 0.9, hint: 'Abertura na parede' },
   window: { name: 'Janela', group: 'Cenário', length: 1.2, hint: 'Abertura na parede' },
   wall: { name: 'Parede', group: 'Cenário', length: 4, hint: 'Limite do cenário' }
@@ -673,6 +680,61 @@ function symbolSvg(it: LightItem): string {
     }
     case 'chair':
       return `<rect x="-9" y="-9" width="18" height="18" rx="2" fill="#efe3d0" ${stroke}/><line x1="-9" y1="9" x2="9" y2="9" stroke="${INK}" stroke-width="4"/>`
+    case 'roundtable':
+      return `<circle r="${f(len / 2)}" fill="#efe3d0" ${stroke}/>`
+    case 'sofa':
+    case 'armchair': {
+      // seen from above: the back along the top side, an arm at each end, the seat between
+      const w = (it.depth ?? d.depth ?? 0.9) * S
+      const back = Math.min(w * 0.28, 16)
+      const arm = Math.min(len * 0.12, 14)
+      return (
+        `<rect x="${f(-len / 2)}" y="${f(-w / 2)}" width="${f(len)}" height="${f(w)}" rx="6" fill="#dfe7ef" ${stroke}/>` +
+        `<rect x="${f(-len / 2)}" y="${f(-w / 2)}" width="${f(len)}" height="${f(back)}" rx="5" fill="#c3cfdb" ${stroke}/>` +
+        `<rect x="${f(-len / 2)}" y="${f(-w / 2)}" width="${f(arm)}" height="${f(w)}" rx="5" fill="#c3cfdb" ${stroke}/>` +
+        `<rect x="${f(len / 2 - arm)}" y="${f(-w / 2)}" width="${f(arm)}" height="${f(w)}" rx="5" fill="#c3cfdb" ${stroke}/>`
+      )
+    }
+    case 'bed': {
+      // the headboard on the left, two pillows, the sheet folded back
+      const w = (it.depth ?? d.depth ?? 1.4) * S
+      const pw = Math.min(len * 0.14, 22)
+      const ph = w / 2 - 6
+      return (
+        `<rect x="${f(-len / 2)}" y="${f(-w / 2)}" width="${f(len)}" height="${f(w)}" rx="3" fill="#f4f1ea" ${stroke}/>` +
+        `<line x1="${f(-len / 2)}" y1="${f(-w / 2)}" x2="${f(-len / 2)}" y2="${f(w / 2)}" stroke="${INK}" stroke-width="5"/>` +
+        `<rect x="${f(-len / 2 + 6)}" y="${f(-w / 2 + 4)}" width="${f(pw)}" height="${f(ph)}" rx="4" fill="#ffffff" ${stroke}/>` +
+        `<rect x="${f(-len / 2 + 6)}" y="${f(2)}" width="${f(pw)}" height="${f(ph)}" rx="4" fill="#ffffff" ${stroke}/>` +
+        `<line x1="${f(-len / 2 + pw + 16)}" y1="${f(-w / 2)}" x2="${f(-len / 2 + pw + 16)}" y2="${f(w / 2)}" stroke="${MID}" stroke-width="1.2"/>`
+      )
+    }
+    case 'wardrobe': {
+      // two doors opening downwards
+      const w = (it.depth ?? d.depth ?? 0.6) * S
+      return (
+        `<rect x="${f(-len / 2)}" y="${f(-w / 2)}" width="${f(len)}" height="${f(w)}" fill="#e2d2bb" ${stroke}/>` +
+        `<line x1="0" y1="${f(-w / 2)}" x2="0" y2="${f(w / 2)}" stroke="${INK}" stroke-width="1.2"/>` +
+        `<line x1="${f(-len / 2)}" y1="${f(w / 2 - 3)}" x2="${f(len / 2)}" y2="${f(w / 2 - 3)}" stroke="${MID}" stroke-width="1"/>`
+      )
+    }
+    case 'counter': {
+      const w = (it.depth ?? d.depth ?? 0.6) * S
+      return (
+        `<rect x="${f(-len / 2)}" y="${f(-w / 2)}" width="${f(len)}" height="${f(w)}" fill="#e9e5df" ${stroke}/>` +
+        `<rect x="${f(-len / 2 + 4)}" y="${f(-w / 2 + 4)}" width="${f(len - 8)}" height="${f(w - 8)}" fill="none" stroke="${MID}" stroke-width="1"/>`
+      )
+    }
+    case 'shelf': {
+      // the shelves seen from above: dividers across the length
+      const w = (it.depth ?? d.depth ?? 0.35) * S
+      const n = Math.max(2, Math.round(len / S / 0.5))
+      let lines = ''
+      for (let i = 1; i < n; i++) {
+        const x = -len / 2 + (len * i) / n
+        lines += `<line x1="${f(x)}" y1="${f(-w / 2)}" x2="${f(x)}" y2="${f(w / 2)}" stroke="${INK}" stroke-width="1"/>`
+      }
+      return `<rect x="${f(-len / 2)}" y="${f(-w / 2)}" width="${f(len)}" height="${f(w)}" fill="#e2d2bb" ${stroke}/>${lines}`
+    }
     case 'door': {
       const h = len / 2
       return (
@@ -762,7 +824,15 @@ function labelOffset(it: LightItem): number {
     case 'chinaball':
       return 34
     case 'table':
-      return Math.min(((it.depth ?? ITEM_DEFS.table.depth ?? 0.8) * S) / 2 + 14, 240)
+    case 'sofa':
+    case 'armchair':
+    case 'bed':
+    case 'wardrobe':
+    case 'counter':
+    case 'shelf':
+      return Math.min(((it.depth ?? ITEM_DEFS[it.type].depth ?? 0.8) * S) / 2 + 14, 240)
+    case 'roundtable':
+      return Math.min(((it.length ?? 1) * S) / 2 + 14, 240)
     default:
       return 30
   }
@@ -1028,7 +1098,7 @@ export function lightMapSvg(map: LightMap, opts: SvgOptions = {}): string {
 
   // draw cones and modifiers under the actors and cameras
   const order = (t: LightItemType): number =>
-    t === 'wall' || t === 'door' || t === 'window' || t === 'table' || t === 'chair' ? 0 : t === 'overhead' ? 1 : t === 'actor' || t === 'camera' ? 3 : 2
+    t === 'wall' || t === 'door' || t === 'window' || ITEM_DEFS[t].group === 'Cenário' ? 0 : t === 'overhead' ? 1 : t === 'actor' || t === 'camera' ? 3 : 2
   const numbers = lightNumbers(map)
   const drawn = map.items
     .slice()

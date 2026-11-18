@@ -50,6 +50,21 @@ async function catchReports(app: ElectronApplication): Promise<() => Promise<any
 }
 
 test.describe('F29 updates of 17/11', () => {
+  test('F29-H2 the light map has more furniture, each with its size', async ({ app, page, dialogs }) => {
+    await open(page, dialogs)
+    await menu(app, 'view-lightmap')
+    await page.getByRole('button', { name: 'Criar o primeiro mapa' }).click()
+    for (const name of ['Mesa redonda', 'Sofá', 'Poltrona', 'Cama', 'Armário', 'Bancada', 'Estante']) {
+      await page.locator('.lm-piece', { hasText: name }).first().click()
+      await expect(page.getByLabel('Comprimento (m)'), name).toBeVisible()
+    }
+    await expect(page.locator('#it-depth')).toBeVisible() // the shelf has a width
+    await page.locator('.lm-piece', { hasText: 'Mesa redonda' }).first().click()
+    await expect(page.locator('#it-depth')).toHaveCount(0) // a round table only has its diameter
+    await expect(page.locator('.lm-surface [data-item]')).toHaveCount(8)
+    await page.locator('.lm-surface').screenshot({ path: 'test-results/f29-moveis.png' })
+  })
+
   test('F29-H1 a lunch break goes into the day sheet between the scenes, by its time', async ({ app, page, dialogs }) => {
     const dir = await open(page, dialogs)
     await menu(app, 'view-shooting')

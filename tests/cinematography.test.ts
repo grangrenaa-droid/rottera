@@ -418,3 +418,48 @@ describe('the model of a piece of equipment', () => {
     expect(gearList(maps).map((g) => g.name)).toEqual(['Fresnel · Arri 650 Plus', 'Fresnel'])
   })
 })
+
+describe('more furniture on the light map', () => {
+  const NEW: [string, string][] = [
+    ['roundtable', 'Mesa redonda'],
+    ['sofa', 'Sofá'],
+    ['armchair', 'Poltrona'],
+    ['bed', 'Cama'],
+    ['wardrobe', 'Armário'],
+    ['counter', 'Bancada'],
+    ['shelf', 'Estante']
+  ]
+  it('are in the palette as scenery, with a size of their own', () => {
+    for (const [t, name] of NEW) {
+      const type = t as keyof typeof ITEM_DEFS
+      expect(ITEM_DEFS[type]?.name, t).toBe(name)
+      expect(ITEM_DEFS[type].group).toBe('Cenário')
+      expect(PALETTE_TYPES).toContain(type)
+      expect(ITEM_DEFS[type].length, t).toBeGreaterThan(0)
+    }
+    // a round table has a diameter; the others a length and a width
+    expect(ITEM_DEFS.roundtable.depth).toBeUndefined()
+    expect(ITEM_DEFS.sofa.depth).toBeGreaterThan(0)
+  })
+
+  it('keep their size in the file and are drawn, without a model', () => {
+    for (const [t] of NEW) {
+      const type = t as keyof typeof ITEM_DEFS
+      const it = cleanItem({ ...newItem(type, 2, 2), length: 1.5, model: 'x' }, 6, 4)!
+      expect(it.length, t).toBe(1.5)
+      expect(it.model).toBeUndefined()
+      const svg = lightMapSvg({ ...newLightMap('Sala'), items: [it] }, { interactive: true })
+      expect(svg, t).toContain(`data-item="${it.id}"`)
+    }
+  })
+})
+
+describe('the shelf drawing', () => {
+  it('has one divider every half metre, not one per pixel', () => {
+    const it = newItem('shelf', 2, 2)
+    const svg = lightMapSvg({ ...newLightMap('Sala'), items: [it] }, { interactive: true })
+    const part = svg.slice(svg.indexOf(`data-item="${it.id}"`))
+    const own = part.slice(0, part.indexOf('</g>'))
+    expect((own.match(/<line /g) ?? []).length).toBe(1)
+  })
+})
