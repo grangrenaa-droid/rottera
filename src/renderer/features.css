@@ -448,3 +448,11 @@ button.link:focus-visible { outline: 2px solid var(--color-focus-ring); outline-
 .export-hint { font-weight: 400; font-size: 12px; }
 .template:disabled { opacity: .55; cursor: default; }
 .template:disabled:hover { border-color: var(--color-border); }
+
+/* meal breaks of a shooting day */
+.plan-breaks { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin: 6px 0; }
+.plan-break { display: flex; gap: 6px; align-items: center; padding: 2px 6px; border: 1px dashed var(--color-border); border-radius: var(--radius-sm); }
+.plan-break select { height: 30px; }
+.plan-break input[type="time"] { width: 110px; }
+.plan-break-min { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; }
+.plan-break-min input { width: 64px; }

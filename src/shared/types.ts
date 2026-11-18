@@ -311,6 +311,16 @@ export interface BreakdownItem {
   scenes: string[]
 }
 
+/** A meal break on a shooting day. */
+export type BreakKind = 'breakfast' | 'lunch' | 'snack' | 'dinner'
+export interface MealBreak {
+  id: string
+  kind: BreakKind
+  /** "12:30", or '' when it has no time yet. */
+  time: string
+  minutes: number
+}
+
 export interface ShootDay {
   id: string
   /** Free text: a date, "Dia 3 - sábado"... Empty shows as "Dia N". */
@@ -331,6 +341,8 @@ export interface ShootDay {
   date?: string
   /** Where the day is shot, when not where the film is (Luz → Sol e horários). */
   place?: Place
+  /** Meal breaks, printed on the day sheet between the scenes by their time. */
+  breaks?: MealBreak[]
 }
 
 export interface Production {

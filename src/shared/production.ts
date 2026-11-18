@@ -1,4 +1,4 @@
-import type { Block, BreakdownCategory, BreakdownItem, Frame, Paper, Production, Script, ShootDay } from './types'
+import type { Block, BreakKind, BreakdownCategory, BreakdownItem, Frame, MealBreak, Paper, Production, Script, ShootDay } from './types'
 import { shotText } from './storyboard'
 import type { Report } from './reports'
 import type { CallSheet, ReportSection } from './reportHtml'
@@ -184,6 +184,18 @@ export function cleanProduction(raw: unknown): Production {
         if (Object.keys(all).length) day.shotTimes = all
       }
       if (isDate(x.date)) day.date = x.date
+      if (Array.isArray(x.breaks)) {
+        const breaks = x.breaks
+          .slice(0, 20)
+          .filter((b): b is Record<string, unknown> => !!b && typeof b === 'object' && strId((b as Record<string, unknown>).id))
+          .map((b) => ({
+            id: b.id as string,
+            kind: (b.kind as string) in BREAK_KINDS ? (b.kind as BreakKind) : 'snack',
+            time: isTime(b.time) ? b.time : '',
+            minutes: typeof b.minutes === 'number' && b.minutes >= 1 && b.minutes <= 600 ? Math.round(b.minutes) : 30
+          }))
+        if (breaks.length) day.breaks = breaks
+      }
       const place = cleanPlace(x.place)
       if (place) day.place = place
       raw.push(day)
@@ -241,6 +253,30 @@ export function addDay(p: Production): Production {
 export function removeDay(p: Production, dayId: string): Production {
   return { ...p, days: p.days.filter((d) => d.id !== dayId) }
 }
+
+/** The meal breaks a day can have, as the day sheet names them. */
+export const BREAK_KINDS: Record<BreakKind, string> = { breakfast: 'Café da manhã', lunch: 'Almoço', snack: 'Lanche', dinner: 'Jantar' }
+const BREAK_MINUTES: Record<BreakKind, number> = { breakfast: 30, lunch: 60, snack: 30, dinner: 60 }
+
+/** "1 h", "45 min", "1 h 30 min". */
+export const breakLength = (min: number): string =>
+  min < 60 ? `${min} min` : min % 60 === 0 ? `${min / 60} h` : `${Math.floor(min / 60)} h ${min % 60} min`
+
+const withBreaks = (p: Production, dayId: string, f: (list: MealBreak[]) => MealBreak[]): Production => ({
+  ...p,
+  days: p.days.map((d) => {
+    if (d.id !== dayId) return d
+    const list = f(d.breaks ?? [])
+    const next: ShootDay = { ...d, breaks: list }
+    if (!list.length) delete next.breaks
+    return next
+  })
+})
+export const addBreak = (p: Production, dayId: string, kind: BreakKind = 'lunch'): Production =>
+  withBreaks(p, dayId, (l) => [...l, { id: newId('brk'), kind, time: '', minutes: BREAK_MINUTES[kind] }])
+export const updateBreak = (p: Production, dayId: string, id: string, patch: Partial<Pick<MealBreak, 'kind' | 'time' | 'minutes'>>): Production =>
+  withBreaks(p, dayId, (l) => l.map((b) => (b.id === id ? { ...b, ...patch } : b)))
+export const removeBreak = (p: Production, dayId: string, id: string): Production => withBreaks(p, dayId, (l) => l.filter((b) => b.id !== id))
 
 export function updateDay(p: Production, dayId: string, patch: Partial<Pick<ShootDay, 'label' | 'notes' | 'date' | 'place'>>): Production {
   return {
@@ -774,6 +810,7 @@ function callSheetOf(day: ShootDay, n: number, total: number, list: PlanEntry[],
     summary: daySummary(list),
     notes: day.notes.trim(),
     ...(day.date ? { date: longDate(day.date) } : {}),
+    ...(day.breaks?.length ? { breaks: day.breaks.map((b) => ({ time: b.time, label: BREAK_KINDS[b.kind], length: breakLength(b.minutes) })) } : {}),
     ...(sun ? { sun } : {}),
     ...(sound ? { ambiences: sound.ambiences([...new Set(list.map((e) => locationKey(e.scene)))]) } : {}),
     scenes: list.map((e) => ({

@@ -57,6 +57,8 @@ export interface CallSheet {
   date?: string
   /** The day's sun on one line (Luz window), when the day has a date and a place. */
   sun?: string
+  /** Meal breaks, printed between the scenes by their time ('' = at the end). */
+  breaks?: { time: string; label: string; length: string }[]
   scenes: CallSheetScene[]
 }
 
@@ -138,6 +140,7 @@ function cleanCallSheet(c: CallSheet): CallSheet {
     ambiences: str(x.ambiences, MAX_CELL),
     date: str(x.date, 60),
     sun: str(x.sun, 400),
+    breaks: list(x.breaks, 20, (b) => ({ time: str(b.time, 20), label: str(b.label, 60), length: str(b.length, 30) })),
     scenes: list(x.scenes, 2000, (s) => ({
       time: str(s.time, 20),
       number: str(s.number, 40),
@@ -183,7 +186,18 @@ function callSheetHtml(c: CallSheet, scriptTitle: string): string {
       `</section>`
     )
   }
-  return head + (c.scenes.length ? c.scenes.map(scene).join('\n') : '<p class="empty">Nenhuma cena neste dia.</p>')
+  const brk = (b: { time: string; label: string; length: string }): string =>
+    `<section class="cs-break"><div class="cs-line"><span class="cs-time">${esc(b.time || '—')}</span><span class="cs-what">${esc(b.label)} · ${esc(b.length)}</span></div></section>`
+  // each break goes before the first scene shot after it; breaks with no time, at the end
+  const timed = (c.breaks ?? []).filter((b) => b.time).sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0))
+  const untimed = (c.breaks ?? []).filter((b) => !b.time)
+  const out: string[] = []
+  for (const s of c.scenes) {
+    while (s.time && timed.length && timed[0].time <= s.time) out.push(brk(timed.shift()!))
+    out.push(scene(s))
+  }
+  for (const b of [...timed, ...untimed]) out.push(brk(b))
+  return head + (c.scenes.length ? out.join('\n') : '<p class="empty">Nenhuma cena neste dia.</p>' + [...timed, ...untimed].map(brk).join(''))
 }
 
 /** A cell with nothing to say: blank or the dash the reports write for "none". */
@@ -278,6 +292,8 @@ tr.gn td { font-style: italic; color: #333; border-bottom: 0.5pt dashed #999 }
 .cs-locs { margin: 4pt 0 0; font-size: 9.5pt }
 .cs-notes { margin-top: 6pt; padding: 5pt 7pt; border: 1pt solid #111; font-size: 9.5pt; white-space: pre-wrap }
 .cs-scene { break-inside: avoid; border-bottom: 0.5pt solid #999; padding: 6pt 0 7pt }
+.cs-break { break-inside: avoid; border-bottom: 0.5pt dashed #999; padding: 4pt 0; background: #f2f2f2 }
+.cs-break .cs-line { font-weight: 600; font-style: italic }
 .cs-line { display: flex; gap: 10pt; align-items: baseline; font-size: 10.5pt; font-weight: 700 }
 .cs-time { min-width: 34pt; font-variant-numeric: tabular-nums }
 .cs-syn, .cs-row, .cs-shots { margin: 3pt 0 0 44pt }

@@ -1,10 +1,14 @@
 import { useMemo, useState, type DragEvent } from 'react'
-import type { BreakdownCategory, Frame, Production, ShootDay } from '../shared/types'
+import type { BreakKind, BreakdownCategory, Frame, Production, ShootDay } from '../shared/types'
 import type { Report } from '../shared/reports'
 import type { DaySound } from '../shared/production'
 import { reportToCsv } from '../shared/reports'
 import {
+  BREAK_KINDS,
   CATEGORIES,
+  addBreak,
+  removeBreak,
+  updateBreak,
   ITEM_MAX,
   DAY_LABEL_MAX,
   DAY_NOTES_MAX,
@@ -500,6 +504,9 @@ function Plan(p: Props): JSX.Element {
                     <button className="btn ghost" onClick={() => p.onExportPdf(dayReport(d, n, p.scenes, prod, shots, p.daySound, p.daySunLine?.(d) || undefined), false)}>
                       Ordem do dia (PDF)
                     </button>
+                    <button className="btn ghost" onClick={() => p.onChange(addBreak(prod, d.id))}>
+                      + Pausa
+                    </button>
                     <button className="btn ghost" onClick={() => p.onChange(removeDay(prod, d.id))}>
                       Apagar dia
                     </button>
@@ -510,6 +517,43 @@ function Plan(p: Props): JSX.Element {
                 ) : (
                   <ol className="strips">{list.map((s, i) => strip(s, { dayId: d.id, pos: i, count: list.length }))}</ol>
                 )}
+                {d.breaks?.length ? (
+                <div className="plan-breaks" role="group" aria-label={`Pausas de ${dayLabel(d, n)}`}>
+                  {d.breaks.map((b, i) => {
+                    const who = `pausa ${i + 1} de ${dayLabel(d, n)}`
+                    return (
+                      <div key={b.id} className="plan-break">
+                        <select aria-label={`Tipo da ${who}`} value={b.kind} onChange={(ev) => p.onChange(updateBreak(prod, d.id, b.id, { kind: ev.target.value as BreakKind }))}>
+                          {(Object.keys(BREAK_KINDS) as BreakKind[]).map((k) => (
+                            <option key={k} value={k}>
+                              {BREAK_KINDS[k]}
+                            </option>
+                          ))}
+                        </select>
+                        <input type="time" aria-label={`Horário da ${who}`} value={b.time} onChange={(ev) => p.onChange(updateBreak(prod, d.id, b.id, { time: ev.target.value }))} />
+                        <label className="plan-break-min">
+                          <input
+                            type="number"
+                            min={5}
+                            max={600}
+                            step={5}
+                            aria-label={`Minutos da ${who}`}
+                            value={b.minutes}
+                            onChange={(ev) => {
+                              const v = Math.round(Number(ev.target.value))
+                              if (v >= 1 && v <= 600) p.onChange(updateBreak(prod, d.id, b.id, { minutes: v }))
+                            }}
+                          />
+                          min
+                        </label>
+                        <button className="icon" aria-label={`Tirar a ${who}`} onClick={() => p.onChange(removeBreak(prod, d.id, b.id))}>
+                          ×
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+                ) : null}
                 <textarea
                   value={d.notes}
                   maxLength={DAY_NOTES_MAX}
