@@ -105,3 +105,62 @@ describe('the sun comes from where it is', () => {
     expect(shade(7.5, 0.5, 0)).not.toBe(shade(0.5, 5.5, 0))
   })
 })
+
+describe('doors and windows open a wall (Etapa 2)', () => {
+  // a wall across the set at y = 3, from x = 1 to 7; a door on it at x = 2.5, a window at x = 5.5
+  const room = (extra: LightMap['items'] = []): LightMap => ({
+    ...newLightMap('Sala'),
+    id: 'sala',
+    width: 8,
+    height: 6,
+    items: [wall(4, 3, 6), { ...newItem('door', 2.5, 3.1), length: 1 }, { ...newItem('window', 5.5, 2.95), length: 1.2, rotation: 90 }, ...extra]
+  })
+
+  it('a door is a gap in the wall; a window too, when the light may pass it', () => {
+    const closed = wallSegments(room())
+    expect(closed.map((s) => [s.x1, s.x2].map((v) => Math.round(v * 100) / 100))).toEqual([
+      [1, 2],
+      [3, 7]
+    ])
+    const open = wallSegments(room(), { windows: 'open' })
+    expect(open.map((s) => [s.x1, s.x2].map((v) => Math.round(v * 100) / 100))).toEqual([
+      [1, 2],
+      [3, 4.9],
+      [6.1, 7]
+    ])
+  })
+
+  it('a door or window away from any wall changes nothing', () => {
+    const m = { ...room(), items: [wall(4, 3, 6), { ...newItem('door', 4, 5), length: 1 }] }
+    expect(wallSegments(m)).toHaveLength(1)
+  })
+
+  it('a light goes through the door, sharp', () => {
+    const beam = { x: 2.5, y: 5, rotation: 0, spread: 40, range: 4 }
+    expect(insidePolygon({ x: 2.5, y: 2 }, litArea(beam, wallSegments(room())))).toBe(true)
+  })
+
+  it('the sun goes through a door in full, and through a window only softened', () => {
+    const closed = sunShadows(180, wallSegments(room()), 8, 6)
+    const open = sunShadows(180, wallSegments(room(), { windows: 'open' }), 8, 6)
+    const shaded = (p: { x: number; y: number }, list: { x: number; y: number }[][]): boolean => list.some((q) => insidePolygon(p, q))
+    // behind the door: no shadow at all
+    expect(shaded({ x: 2.5, y: 4 }, closed)).toBe(false)
+    // behind the window: shadow for the full sun, light for the soft one
+    expect(shaded({ x: 5.5, y: 4 }, closed)).toBe(true)
+    expect(shaded({ x: 5.5, y: 4 }, open)).toBe(false)
+    // behind the wall: shadow either way
+    expect(shaded({ x: 4, y: 4 }, open)).toBe(true)
+  })
+
+  it('the drawing shows the soft light through a window, and nothing new without one', () => {
+    const sun = { ...newItem('sun', 4, 0.4), id: 'sol' }
+    const lamp = { ...newItem('fresnel', 5.5, 5), id: 'luz', rotation: 0, range: 4 }
+    const svg = lightMapSvg({ ...room([sun, lamp]), shadows: true })
+    expect(svg).toContain('data-sun-window="sol"')
+    expect(svg).toContain('data-soft="luz"')
+    const plain = lightMapSvg({ ...newLightMap('x'), shadows: true, items: [wall(4, 3, 6), sun, lamp] })
+    expect(plain).not.toContain('data-sun-window')
+    expect(plain).not.toContain('data-soft')
+  })
+})

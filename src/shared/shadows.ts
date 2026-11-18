@@ -16,17 +16,46 @@ export interface Pt {
   y: number
 }
 
-/** The walls of a map as segments: through the wall's centre, along its rotation, its length long. */
-export function wallSegments(map: LightMap): Segment[] {
-  return map.items
-    .filter((it) => it.type === 'wall')
-    .map((it) => {
-      const h = (it.length ?? 4) / 2
-      const a = (it.rotation * Math.PI) / 180
-      const dx = Math.cos(a) * h
-      const dy = Math.sin(a) * h
-      return { x1: it.x - dx, y1: it.y - dy, x2: it.x + dx, y2: it.y + dy }
-    })
+/** How close to a wall a door or window must sit to open it, in metres. */
+const ON_WALL = 0.3
+
+/**
+ * The walls of a map as segments: through the wall's centre, along its rotation, its length long. A door sitting on a
+ * wall is a gap in it; a window too, when `windows` is 'open' (the light that goes through it is drawn softened). Only
+ * where the opening sits matters, not how it is turned: its length is cut out of the wall around that point.
+ */
+export function wallSegments(map: LightMap, opts: { windows?: 'open' | 'closed' } = {}): Segment[] {
+  const openings = map.items.filter((it) => it.type === 'door' || (it.type === 'window' && opts.windows === 'open'))
+  const out: Segment[] = []
+  for (const it of map.items) {
+    if (it.type !== 'wall') continue
+    const len = it.length ?? 4
+    const a = (it.rotation * Math.PI) / 180
+    const ux = Math.cos(a)
+    const uy = Math.sin(a)
+    const x0 = it.x - (ux * len) / 2
+    const y0 = it.y - (uy * len) / 2
+    // the stretches of the wall the openings take, along it (0 at one end, len at the other)
+    const cuts: [number, number][] = []
+    for (const o of openings) {
+      const t = (o.x - x0) * ux + (o.y - y0) * uy
+      const off = Math.abs(-(o.x - x0) * uy + (o.y - y0) * ux)
+      if (off > ON_WALL || t < 0 || t > len) continue
+      const h = (o.length ?? (o.type === 'door' ? 0.9 : 1.2)) / 2
+      cuts.push([Math.max(0, t - h), Math.min(len, t + h)])
+    }
+    cuts.sort((p, q) => p[0] - q[0])
+    let from = 0
+    const piece = (s: number, e: number): void => {
+      if (e - s > 1e-6) out.push({ x1: x0 + ux * s, y1: y0 + uy * s, x2: x0 + ux * e, y2: y0 + uy * e })
+    }
+    for (const [s, e] of cuts) {
+      piece(from, s)
+      from = Math.max(from, e)
+    }
+    piece(from, len)
+  }
+  return out
 }
 
 /** Where a piece turned `rotation` degrees points: 0 is the top of the drawing, clockwise. */

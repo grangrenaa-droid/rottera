@@ -18,6 +18,30 @@ async function rpc(userData: string, method: string, params: unknown = {}): Prom
 }
 
 test.describe('F30 light and shadow on the light map (Etapa 1)', () => {
+  test('F30-H2 a door lets the light through, a window lets it through softened (Etapa 2)', async ({ app, page, dialogs, userData }) => {
+    const dir = mkdtempSync(join(tmpdir(), 'rottera-f30-'))
+    const f = join(dir, 'in.fountain')
+    writeFileSync(f, 'INT. SALA - DIA\n\nLuz.\n', 'utf8')
+    await dialogs.open(f)
+    await page.getByRole('button', { name: 'Importar FDX ou Fountain…' }).click()
+    await expect(page.getByRole('textbox', { name: 'Texto do roteiro' })).toBeVisible()
+    expect((await rpc(userData, 'create_lightmap', { name: 'Sala', scene: '1', width: 8, height: 6 })).ok).toBe(true)
+    const add = async (p: Record<string, unknown>): Promise<void> => {
+      expect((await rpc(userData, 'add_light_item', { map: 'Sala', ...p })).ok).toBe(true)
+    }
+    await add({ type: 'wall', x: 4, y: 2, rotation: 0, length: 6 })
+    await add({ type: 'door', x: 2.2, y: 2, length: 1 })
+    await add({ type: 'window', x: 5.5, y: 2, length: 1.4 })
+    await add({ type: 'sun', x: 6.5, y: 0.3 })
+    await add({ type: 'fresnel', x: 5.5, y: 4.5, rotation: 0, range: 4 })
+    await menu(app, 'view-lightmap')
+    await page.getByLabel('Luz e sombra').check()
+    const surface = page.locator('.lm-surface')
+    await expect(surface.locator('[data-sun-window]')).toHaveCount(1)
+    await expect(surface.locator('[data-soft]')).toHaveCount(1)
+    await surface.screenshot({ path: 'test-results/f30-porta-janela.png' })
+  })
+
   test('F30-H1 with "Luz e sombra" on, walls stop the light and the sun lights the map with shadows', async ({ app, page, dialogs, userData }) => {
     const dir = mkdtempSync(join(tmpdir(), 'rottera-f30-'))
     const f = join(dir, 'in.fountain')

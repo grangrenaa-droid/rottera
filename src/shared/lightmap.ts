@@ -1185,11 +1185,21 @@ export function lightMapSvg(map: LightMap, opts: SvgOptions = {}): string {
 function lightAndShadowSvg(map: LightMap): string {
   const W = map.width * S
   const H = map.height * S
+  // doors are gaps in the walls; windows stop the full light but let a softened one through
   const walls = wallSegments(map)
+  const open = wallSegments(map, { windows: 'open' })
+  const windows = open.length !== walls.length || open.some((w, i) => w.x1 !== walls[i].x1 || w.y1 !== walls[i].y1 || w.x2 !== walls[i].x2 || w.y2 !== walls[i].y2)
   const pts = (list: ShadowPt[]): string => list.map((p) => `${f(p.x * S)},${f(p.y * S)}`).join(' ')
   const key = (s: string): string => s.replace(/[^A-Za-z0-9_-]/g, '')
   const clip = `ls-clip-${key(map.id)}`
+  const blur = `ls-soft-${key(map.id)}`
   let out = `<clipPath id="${clip}"><rect x="0" y="0" width="${W}" height="${H}"/></clipPath>`
+  if (windows) out += `<filter id="${blur}" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="7"/></filter>`
+  const hash = (text: string): string => {
+    let h = 5381
+    for (const c of text) h = ((h << 5) + h + c.charCodeAt(0)) | 0
+    return (h >>> 0).toString(36)
+  }
   for (const it of map.items) {
     const d = ITEM_DEFS[it.type]
     if (!isLight(it.type) || !d.cone) continue
@@ -1197,21 +1207,35 @@ function lightAndShadowSvg(map: LightMap): string {
     if (it.type === 'sun' || it.type === 'moon') {
       // the light comes from where the sun is, towards the middle of the set
       const towards = sunRotation(it, map.width, map.height)
+      // full sun stops at walls and windows; the shadow proper is what not even the softened light reaches
       const shadows = sunShadows(towards, walls, map.width, map.height)
-      // the mask's name carries what it cuts: a sun turned (or a wall moved) gets a new one, so the screen never keeps
+      const dark = windows ? sunShadows(towards, open, map.width, map.height) : shadows
+      // the mask's name carries what it cuts: a sun moved (or a wall moved) gets a new one, so the screen never keeps
       // an old shadow, and two drawings of the same map side by side keep their own
-      let h = 5381
-      for (const c of `${towards}|${shadows.map(pts).join('|')}`) h = ((h << 5) + h + c.charCodeAt(0)) | 0
-      const mask = `ls-sun-${key(map.id)}-${key(it.id)}-${(h >>> 0).toString(36)}`
+      const id = `${key(map.id)}-${key(it.id)}-${hash(`${towards}|${shadows.map(pts).join('|')}|${dark.map(pts).join('|')}`)}`
+      const poly = (list: ShadowPt[][], fill: string): string => list.map((q) => `<polygon points="${pts(q)}" fill="${fill}"/>`).join('')
       out +=
         `<g data-sun="${escapeXml(it.id)}" clip-path="url(#${clip})" pointer-events="none">` +
-        `<mask id="${mask}"><rect x="0" y="0" width="${W}" height="${H}" fill="#ffffff"/>${shadows.map((q) => `<polygon points="${pts(q)}" fill="#000000"/>`).join('')}</mask>` +
-        `<rect x="0" y="0" width="${W}" height="${H}" fill="${color}" fill-opacity="0.12" mask="url(#${mask})"/>` +
-        `<g data-shade="${escapeXml(it.id)}" opacity="0.16">${shadows.map((q) => `<polygon points="${pts(q)}" fill="#3d4654"/>`).join('')}</g>` +
+        `<mask id="ls-sun-${id}"><rect x="0" y="0" width="${W}" height="${H}" fill="#ffffff"/>${poly(shadows, '#000000')}</mask>` +
+        `<rect x="0" y="0" width="${W}" height="${H}" fill="${color}" fill-opacity="0.12" mask="url(#ls-sun-${id})"/>` +
+        (windows
+          ? // through a window: the light that gets in, softened (fainter, blurred edges)
+            `<mask id="ls-win-${id}"><rect x="0" y="0" width="${W}" height="${H}" fill="#000000"/>${poly(shadows, '#ffffff')}${poly(dark, '#000000')}</mask>` +
+            `<g data-sun-window="${escapeXml(it.id)}" mask="url(#ls-win-${id})"><rect x="0" y="0" width="${W}" height="${H}" fill="${color}" fill-opacity="0.09" filter="url(#${blur})"/></g>`
+          : '') +
+        `<g data-shade="${escapeXml(it.id)}" opacity="0.16">${poly(dark, '#3d4654')}</g>` +
         `</g>`
       continue
     }
-    const area = litArea({ x: it.x, y: it.y, rotation: it.rotation, spread: spreadOf(it), range: it.range ?? d.cone.range, from: -frontOf(it.type) / S }, walls)
+    const beam = { x: it.x, y: it.y, rotation: it.rotation, spread: spreadOf(it), range: it.range ?? d.cone.range, from: -frontOf(it.type) / S }
+    const area = litArea(beam, walls)
+    if (windows) {
+      // what gets through the windows: the same beam with the windows open, softened, under the sharp one
+      const through = litArea(beam, open)
+      if (pts(through) !== pts(area)) {
+        out += `<polygon data-soft="${escapeXml(it.id)}" points="${pts(through)}" clip-path="url(#${clip})" fill="${color}" fill-opacity="0.10" filter="url(#${blur})" pointer-events="none"/>`
+      }
+    }
     out +=
       `<polygon data-lit="${escapeXml(it.id)}" points="${pts(area)}" clip-path="url(#${clip})" fill="${color}" fill-opacity="0.16" ` +
       `stroke="${color}" stroke-width="1" stroke-dasharray="5 4" pointer-events="none"/>`
