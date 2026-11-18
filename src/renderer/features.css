@@ -511,3 +511,7 @@ button.link:focus-visible { outline: 2px solid var(--color-focus-ring); outline-
 .strip-shots > .plan-break-shot { list-style: none; margin: 2px 0; }
 .plan-break { cursor: grab; background: var(--color-surface); }
 .plan-break-grip { color: var(--color-text-muted); font-size: 14px; line-height: 1; }
+/* the three tabs of Filmagem → Elenco: cast, extras, crew */
+.people-window { display: grid; gap: 12px; }
+.people-tabs { justify-self: start; }
+.people-count { font-weight: 400; color: var(--color-text-muted); }

@@ -18,11 +18,19 @@ interface Props {
   flash(text: string): void
 }
 
-/** Cast, extras and crew: photo, who they play or what they do, contacts, measurements, contract, days they cannot come. */
+/** The add button of each group's tab: a new person goes into the group whose tab is open. */
+const ADD: Record<Person['group'], string> = { cast: '+ Ator ou atriz', extra: '+ Figurante', crew: '+ Pessoa da equipe' }
+
+/**
+ * Cast, extras and crew, each in its own tab: photo, who they play or what they do, contacts, measurements, contract,
+ * days they cannot come.
+ */
 export function PeopleView(p: Props): JSX.Element {
+  const [group, setGroup] = useState<Person['group']>('cast')
   const [sel, setSel] = useState<string | null>(null)
   const picker = useRef<HTMLInputElement>(null)
-  const current = p.people.find((x) => x.id === sel) ?? p.people[0] ?? null
+  const shown = p.people.filter((x) => x.group === group)
+  const current = shown.find((x) => x.id === sel) ?? shown[0] ?? null
   const characters = [...new Set(p.scenes.flatMap((s) => s.cast.map(characterKey)))]
   const report = (): Report => peopleReport(p.people)
 
@@ -33,7 +41,7 @@ export function PeopleView(p: Props): JSX.Element {
     p.onChange(p.people.map((x) => (x.id === current.id ? next : x)))
   }
   const add = (): void => {
-    const person = { ...emptyPerson('cast'), id: newId('pessoa') }
+    const person = { ...emptyPerson(group), id: newId('pessoa') }
     p.onChange([...p.people, person])
     setSel(person.id)
   }
@@ -46,36 +54,39 @@ export function PeopleView(p: Props): JSX.Element {
   const label = current?.name.trim() || 'pessoa sem nome'
 
   return (
+    <div className="people-window">
+    <div className="seg people-tabs" role="group" aria-label="Grupos de pessoas">
+      {(Object.keys(GROUPS) as Person['group'][]).map((g) => {
+        const n = p.people.filter((x) => x.group === g).length
+        return (
+          <button key={g} className="btn ghost" aria-pressed={group === g} onClick={() => setGroup(g)}>
+            {GROUPS[g]}
+            {n > 0 && <span className="people-count"> {n}</span>}
+          </button>
+        )
+      })}
+    </div>
     <div className="snd-sheets people-view">
       <div className="people-side">
       <nav aria-label="Pessoas do filme" className="prod-scenes people-list">
-        {(Object.keys(GROUPS) as Person['group'][]).map((g) => {
-          const list = p.people.filter((x) => x.group === g)
-          if (!list.length) return null
-          return (
-            <section key={g}>
-              <h3 className="people-group">{GROUPS[g]}</h3>
-              <ol>
-                {list.map((x) => (
-                  <li key={x.id}>
-                    <button className={x === current ? 'on' : ''} aria-current={x === current} onClick={() => setSel(x.id)}>
-                      <b>{x.photo ? <img src={x.photo} alt="" className="people-thumb" /> : '·'}</b>
-                      <span className="scene-text">{x.name.trim() || 'Sem nome'}</span>
-                      <small>
-                        {g === 'cast' ? x.character || 'sem personagem' : x.role || '—'}
-                        {x.contract ? ` · ${CONTRACTS[x.contract]}` : ''}
-                      </small>
-                    </button>
-                  </li>
-                ))}
-              </ol>
-            </section>
-          )
-        })}
-        {p.people.length === 0 && <p className="muted">Ninguém na lista ainda.</p>}
+        <ol>
+          {shown.map((x) => (
+            <li key={x.id}>
+              <button className={x === current ? 'on' : ''} aria-current={x === current} onClick={() => setSel(x.id)}>
+                <b>{x.photo ? <img src={x.photo} alt="" className="people-thumb" /> : '·'}</b>
+                <span className="scene-text">{x.name.trim() || 'Sem nome'}</span>
+                <small>
+                  {group === 'cast' ? x.character || 'sem personagem' : x.role || '—'}
+                  {x.contract ? ` · ${CONTRACTS[x.contract]}` : ''}
+                </small>
+              </button>
+            </li>
+          ))}
+        </ol>
+        {shown.length === 0 && <p className="muted">Ninguém em {GROUPS[group].toLowerCase()} ainda.</p>}
       </nav>
       <button className="btn secondary" onClick={add}>
-        + Pessoa
+        {ADD[group]}
       </button>
       </div>
 
@@ -132,7 +143,16 @@ export function PeopleView(p: Props): JSX.Element {
                 <div className="snd-choices">
                   {(Object.keys(GROUPS) as Person['group'][]).map((g) => (
                     <label key={g} className="check">
-                      <input type="radio" name="pp-group" checked={current.group === g} onChange={() => put({ group: g })} />
+                      <input
+                        type="radio"
+                        name="pp-group"
+                        checked={current.group === g}
+                        onChange={() => {
+                          put({ group: g })
+                          setGroup(g)
+                          setSel(current.id)
+                        }}
+                      />
                       {GROUPS[g]}
                     </label>
                   ))}
@@ -224,8 +244,9 @@ export function PeopleView(p: Props): JSX.Element {
           </button>
         </section>
       ) : (
-        <p className="muted">Acrescente o elenco, a figuração e a equipe em “+ Pessoa”.</p>
+        <p className="muted">Acrescente em “{ADD[group]}”.</p>
       )}
+    </div>
     </div>
   )
 }

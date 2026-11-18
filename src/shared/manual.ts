@@ -263,7 +263,7 @@ export const MANUAL: ManualTopic[] = [
     group: 'Produção',
     keywords: ['elenco', 'casting', 'atores', 'equipe', 'figuracao', 'contrato', 'medidas', 'figurino', 'contato', 'disponibilidade', 'agenda'],
     body: [
-      { t: 'p', text: 'Em Filmagem → Elenco fica a lista de quem trabalha no filme, em três grupos: Elenco, Figuração e Equipe. Cada pessoa tem foto, o personagem que faz (ou a função), telefone, e-mail, medidas para o figurino (altura, manequim, calçado, tórax ou busto, cintura, quadril), a situação do contrato, os dias em que não pode e observações.' },
+      { t: 'p', text: 'Em Filmagem → Elenco fica a lista de quem trabalha no filme, em três abas: Elenco, Figuração e Equipe. O botão de cada aba (“+ Ator ou atriz”, “+ Figurante”, “+ Pessoa da equipe”) já cria a pessoa naquele grupo; na ficha dá para mudar alguém de grupo depois. Cada pessoa tem foto, o personagem que faz (ou a função), telefone, e-mail, medidas para o figurino (altura, manequim, calçado, tórax ou busto, cintura, quadril), a situação do contrato, os dias em que não pode e observações.' },
       { t: 'ul', items: ['Quem faz um personagem aparece na ficha dele, ao lado do roteiro (“Interpretado por…”).', 'O Plano de filmagem avisa quando uma cena com o personagem cai num dia, com data, em que o ator disse que não pode.', '“Exportar PDF” e “Exportar CSV” saem com contatos, contrato e as medidas principais.'] },
       { t: 'note', text: 'Contatos e medidas são dados pessoais: ficam só no arquivo do roteiro e não são lidos pela conexão com IA.' }
     ]

@@ -115,12 +115,40 @@ test.describe('F29 updates of 17/11', () => {
     await open(page, dialogs)
     await menu(app, 'view-shooting')
     await page.getByRole('group', { name: 'Filmagem' }).getByRole('button', { name: 'Elenco' }).click()
-    for (let i = 0; i < 3; i++) await page.getByRole('button', { name: '+ Pessoa' }).click()
+    for (let i = 0; i < 3; i++) await page.getByRole('button', { name: '+ Ator ou atriz' }).click()
     const list = page.getByRole('navigation', { name: 'Pessoas do filme' })
     const { scroll, client } = await list.evaluate((el) => ({ scroll: el.scrollHeight, client: el.clientHeight }))
     expect(scroll, 'the list does not scroll by itself').toBeLessThanOrEqual(client + 1)
-    const add = await page.getByRole('button', { name: '+ Pessoa' }).boundingBox()
-    expect(add?.height ?? 99, '+ Pessoa on one line').toBeLessThan(44)
+    const add = await page.getByRole('button', { name: '+ Ator ou atriz' }).boundingBox()
+    expect(add?.height ?? 99, 'the add button on one line').toBeLessThan(44)
+  })
+
+  test('F29-H12 cast, extras and crew each have a tab, and a new person goes into the tab it was made in', async ({ app, page, dialogs }) => {
+    await open(page, dialogs)
+    await menu(app, 'view-shooting')
+    await page.getByRole('group', { name: 'Filmagem' }).getByRole('button', { name: 'Elenco' }).click()
+    const groups = page.getByRole('group', { name: 'Grupos de pessoas' })
+    await expect(groups.getByRole('button')).toHaveText([/^Elenco/, /^Figuração/, /^Equipe/])
+    const list = page.getByRole('navigation', { name: 'Pessoas do filme' })
+
+    await groups.getByRole('button', { name: /^Equipe/ }).click()
+    await page.getByRole('button', { name: '+ Pessoa da equipe' }).click()
+    const form = page.getByRole('region', { name: /^Ficha de / })
+    await form.getByLabel('Nome', { exact: true }).fill('Rafa')
+    await expect(form.getByRole('radio', { name: 'Equipe' })).toBeChecked()
+    await expect(form.getByLabel('Função')).toBeVisible()
+    await expect(form.getByLabel('Personagem', { exact: true })).toHaveCount(0)
+    await expect(list.getByRole('button')).toHaveText([/RAFA|Rafa/])
+    await expect(groups.getByRole('button', { name: /^Equipe/ })).toContainText('1')
+
+    await groups.getByRole('button', { name: /^Figuração/ }).click()
+    await page.getByRole('button', { name: '+ Figurante' }).click()
+    await expect(page.getByRole('region', { name: /^Ficha de / }).getByRole('radio', { name: 'Figuração' })).toBeChecked()
+
+    // each tab lists only its own people
+    await groups.getByRole('button', { name: /^Elenco/ }).click()
+    await expect(list.getByRole('button')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: '+ Ator ou atriz' })).toBeVisible()
   })
 
   test('F29-H10 a break is dragged between two shots, or put after a scene, and the day sheet follows', async ({ app, page, dialogs, userData }) => {
@@ -166,7 +194,7 @@ test.describe('F29 updates of 17/11', () => {
       await tabs.getByRole('button', { name: 'Locações' }).click()
       for (const v of await axeViolations(page)) found.push(`${theme}/locações: ${v}`)
       await tabs.getByRole('button', { name: 'Elenco' }).click()
-      if (theme === 'light') await page.getByRole('button', { name: '+ Pessoa' }).click()
+      if (theme === 'light') await page.getByRole('button', { name: '+ Ator ou atriz' }).click()
       for (const v of await axeViolations(page)) found.push(`${theme}/elenco: ${v}`)
       await tabs.getByRole('button', { name: 'Plano de filmagem' }).click()
       if (theme === 'light') {
@@ -214,7 +242,7 @@ test.describe('F29 updates of 17/11', () => {
     const dir = await open(page, dialogs)
     await menu(app, 'view-shooting')
     await page.getByRole('group', { name: 'Filmagem' }).getByRole('button', { name: 'Elenco' }).click()
-    await page.getByRole('button', { name: '+ Pessoa' }).click()
+    await page.getByRole('button', { name: '+ Ator ou atriz' }).click()
     const form = page.getByRole('region', { name: /^Ficha de / })
     await form.getByLabel('Nome', { exact: true }).fill('Ana Souza')
     await form.getByLabel('Personagem', { exact: true }).selectOption('MARINA')
