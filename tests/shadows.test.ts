@@ -430,3 +430,38 @@ describe('light passed on reaches as far down the middle however wide it opens',
     expect(middle(diffusedBeam({ x: 4, y: 3, rotation: 0, type: 'diffuser' }, { x: 0, y: -1 }, 3))).toBeCloseTo(3)
   })
 })
+
+describe("where a light shines, the sun's shadow is gone", () => {
+  const svgOf = (items: LightMap['items']): string => lightMapSvg({ ...newLightMap('Sala'), id: 'sala', width: 8, height: 6, shadows: true, items })
+  const sun = { ...newItem('sun', 7.5, 5.5), id: 'sol' }
+  const parede = { ...wall(4, 2.5, 3, 60), id: 'parede' }
+  const lamp = { ...newItem('fresnel', 1.5, 4.5), id: 'luz', rotation: 30, range: 3 }
+
+  it("the sun's shadow is cleared under every light's beam", () => {
+    const svg = svgOf([sun, parede, lamp])
+    const ref = /data-sun-clear="sol" mask="url\(#([^)]+)\)"/.exec(svg)
+    expect(ref).not.toBeNull()
+    const mask = new RegExp(`<mask id="${ref![1]}"[^>]*>(.*?)</mask>`).exec(svg)![1]
+    const lit = /data-lit="luz" points="([^"]+)"/.exec(svg)![1]
+    expect(mask).toContain(`points="${lit}"`)
+    // the shadow sits inside what is cleared
+    expect(svg.indexOf('data-sun-clear="sol"')).toBeLessThan(svg.indexOf('data-shade="sol"'))
+  })
+
+  it('soft light clears it too, with soft edges', () => {
+    const svg = svgOf([sun, parede, lamp, { ...newItem('bounce', 2.5, 2.5), id: 'b', rotation: 120 }])
+    const ref = /data-sun-clear="sol" mask="url\(#([^)]+)\)"/.exec(svg)![1]
+    const mask = new RegExp(`<mask id="${ref}"[^>]*>(.*?)</mask>`).exec(svg)![1]
+    expect(mask).toMatch(/filter="url\(#ls-soft-sala\)"/)
+  })
+
+  it('with no other light, the shadow is drawn as before', () => {
+    expect(svgOf([sun, parede])).not.toContain('data-sun-clear')
+  })
+
+  it('a new beam gets a new mask, so the screen never keeps an old one', () => {
+    const a = /data-sun-clear="sol" mask="url\(#([^)]+)\)"/.exec(svgOf([sun, parede, lamp]))![1]
+    const b = /data-sun-clear="sol" mask="url\(#([^)]+)\)"/.exec(svgOf([sun, parede, { ...lamp, rotation: 60 }]))![1]
+    expect(a).not.toBe(b)
+  })
+})

@@ -1279,6 +1279,9 @@ function lightAndShadowSvg(map: LightMap): { under: string; over: string } {
   }
   // light the modifiers pass on: reflectors and bounces send it back, diffusers spread it on, softened. `incoming`
   // says where the light that gets to the piece is going and how far it still reaches, or null when it does not get there
+  // every area a light other than the sun gets to: there the sun's shadow is gone (sharp edges for the full light,
+  // soft ones for the softened light)
+  const glows: { points: string; soft: boolean }[] = []
   const passedOn = (color: string, incoming: (m: LightItem) => { dir: ShadowPt; range: number } | null): string => {
     let s = ''
     for (const m of [...mirrors, ...diffusers]) {
@@ -1287,6 +1290,7 @@ function lightAndShadowSvg(map: LightMap): { under: string; over: string } {
       const beam = m.type === 'diffuser' ? diffusedBeam(m, inc.dir, inc.range) : reflectedBeam(m, inc.dir, inc.range)
       const walls = blockers(map, 'sharp', [m.id, ...propsUnder(map, m)], awayFrom(m))
       const area = litArea(beam, walls)
+      glows.push({ points: pts(area), soft: m.type !== 'reflector' })
       lightsProps(color, (p) => (reaches(beam, p, walls) ? (m.type === 'reflector' ? 'sharp' : 'soft') : null))
       const id = escapeXml(m.id)
       if (m.type === 'reflector') {
@@ -1353,11 +1357,15 @@ function lightAndShadowSvg(map: LightMap): { under: string; over: string } {
             dapples(`ls-dapple-${id}`, color) +
             `<g data-cookie="${escapeXml(it.id)}" mask="url(#ls-cut-${id})"><rect x="0" y="0" width="${W}" height="${H}" fill="url(#ls-dapple-${id})" fill-opacity="0.3"/></g>`
           : '') +
+        // where the other lights shine the shadow is gone: the mask that clears it is only known once they are all
+        // drawn, so a mark stands for it here
+        `\u0001${escapeXml(it.id)}\u0001` +
         (patterned
           ? // the shadow is only where neither the softened nor the patterned light gets
             `<mask id="ls-dark-${id}"><rect x="0" y="0" width="${W}" height="${H}" fill="#000000"/>${poly(patch, '#ffffff')}</mask>` +
             `<g data-shade="${escapeXml(it.id)}" opacity="0.16" mask="url(#ls-dark-${id})">${poly(soft, '#3d4654')}</g>`
           : `<g data-shade="${escapeXml(it.id)}" opacity="0.16">${poly(soft, '#3d4654')}</g>`) +
+        `\u0002` +
         // a reflector or bounce in the sun (not in anything's shadow) sends it back; the sun's own softening is drawn above
         passedOn(color, (m) => (m.type !== 'diffuser' && inSun(m, 'sharp', m.id) ? { dir, range: 4 } : null)) +
         `</g>`
@@ -1375,6 +1383,9 @@ function lightAndShadowSvg(map: LightMap): { under: string; over: string } {
     const area = litArea(beam, sharpB)
     const softArea = softened ? litArea(beam, softB) : area
     const cookieArea = patterned ? litArea(beam, cookieB) : area
+    glows.push({ points: pts(area), soft: it.type === 'chinaball' })
+    if (pts(softArea) !== pts(area)) glows.push({ points: pts(softArea), soft: true })
+    if (pts(cookieArea) !== pts(area)) glows.push({ points: pts(cookieArea), soft: true })
     lightsProps(color, (p) =>
       reaches(beam, p, sharpB) ? (it.type === 'chinaball' ? 'soft' : 'sharp') : (softened && reaches(beam, p, softB)) || (patterned && reaches(beam, p, cookieB)) ? 'soft' : null
     )
@@ -1414,6 +1425,18 @@ function lightAndShadowSvg(map: LightMap): { under: string; over: string } {
       return { dir: { x: (m.x - o.x) / dist, y: (m.y - o.y) / dist }, range: Math.max(1, beam.range - dist) }
     })
     if (back) out += `<g clip-path="url(#${clip})" pointer-events="none">${back}</g>`
+  }
+  // the sun's shadows cleared where the other lights shine (the mask's name carries the areas, so a moved light gets a new one)
+  const clearId = `ls-clear-${key(map.id)}-${hash(glows.map((g) => `${g.soft ? 's' : 'h'}${g.points}`).join('|'))}`
+  out = out
+    .replace(/\u0001([^\u0001]*)\u0001/g, (_m, id: string) => (glows.length > 0 ? `<g data-sun-clear="${id}" mask="url(#${clearId})">` : ''))
+    .replace(/\u0002/g, glows.length > 0 ? '</g>' : '')
+  if (glows.length > 0) {
+    out +=
+      `<mask id="${clearId}" maskUnits="userSpaceOnUse" x="0" y="0" width="${W}" height="${H}">` +
+      `<rect x="0" y="0" width="${W}" height="${H}" fill="#ffffff"/>` +
+      glows.map((g) => `<polygon points="${g.points}" fill="#000000"${g.soft ? ` filter="url(#${blur})"` : ''}/>`).join('') +
+      `</mask>`
   }
   // a butterfly over the scene: the light under it softer and lighter
   for (const it of map.items) {
