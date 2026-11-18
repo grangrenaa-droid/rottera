@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import type { CharacterSheet, Script } from '../shared/types'
-import { FIELDS, characterKey, listCharacters, newSheet, presentationOf, sheetIsEmpty } from '../shared/characters'
+import { FIELDS, characterKey, listCharacters, newSheet, presentationOf, setSheet, sheetIsEmpty } from '../shared/characters'
 import { fileToDataUrl } from './Storyboard'
 
 interface Props {
@@ -23,12 +23,7 @@ export function CharactersView({ script, onChange, onExport, flash }: Props): JS
 
   const patch = (changes: Partial<CharacterSheet>): void => {
     if (!current) return
-    const existing = sheets.find((s) => characterKey(s.name) === current.key)
-    if (existing) {
-      onChange(sheets.map((s) => (s.id === existing.id ? { ...s, ...changes } : s)))
-    } else {
-      onChange([...sheets, { ...newSheet(current.name), ...changes }])
-    }
+    onChange(setSheet(sheets, current.name, changes))
   }
 
   const addCharacter = (): void => {

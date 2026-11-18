@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FIELDS, characterKey, characterStats, cleanSheet, listCharacters, newSheet, presentationOf, sheetIsEmpty } from '../src/shared/characters'
+import { FIELDS, characterKey, characterStats, cleanSheet, listCharacters, newSheet, presentationOf, setSheet, sheetIsEmpty } from '../src/shared/characters'
 import { parseScriptFile, serialize } from '../src/shared/scriptfile'
 import { buildPdfHtml } from '../src/main/pdf'
 import type { Block, CharacterSheet, Script } from '../src/shared/types'
@@ -174,5 +174,19 @@ describe('PDF', () => {
     const html = buildPdfHtml(withSheets, { charactersOnly: true })
     expect(html).not.toContain('INT. COZINHA')
     expect(html).toContain('Voltar')
+  })
+})
+
+describe('changing a character sheet from anywhere', () => {
+  it('changes the sheet of that name, or makes one, whatever the extension after the name', () => {
+    const a = newSheet('Marina')
+    let sheets = setSheet([a], 'MARINA (CONT.)', { age: '34' })
+    expect(sheets).toHaveLength(1)
+    expect(sheets[0]).toMatchObject({ id: a.id, age: '34' })
+    sheets = setSheet(sheets, 'Davi', { role: 'Irmão' })
+    expect(sheets.map((s) => [s.name, s.role])).toEqual([
+      ['Marina', ''],
+      ['Davi', 'Irmão']
+    ])
   })
 })

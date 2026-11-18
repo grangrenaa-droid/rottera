@@ -13,6 +13,7 @@ import { characterKey } from '../shared/characters'
 import { groupNotes, noteMarks } from '../shared/notes'
 import { newId } from '../shared/structures'
 import { NotesPanel } from './Notes'
+import { CharacterPanel } from './CharacterPanel'
 import { ReadBar } from './ReadBar'
 import { emptyProduction, sceneInfo } from '../shared/production'
 import { printable, type Report } from '../shared/reports'
@@ -348,6 +349,9 @@ export function App(): JSX.Element {
   /** Where the storyboard or the light map tab opens when reached from a scene. */
   const [jump, setJump] = useState<{ scene?: string; map?: string }>({})
   const [notesOpen, setNotesOpen] = useState(false)
+  /** What the side panel beside the script shows, and which character (by key) or location is open in it. */
+  const [sideTab, setSideTab] = useState<'notes' | 'character' | 'location'>('notes')
+  const [sideCharacter, setSideCharacter] = useState<string | null>(null)
   const [readOpen, setReadOpen] = useState(false)
   /** Why the last copy to the copy folder failed, or null. */
   const [copyFailed, setCopyFailed] = useState<string | null>(null)
@@ -883,6 +887,7 @@ export function App(): JSX.Element {
     setNotes([...(scriptRef.current.notes ?? []), note])
     setPanel('script')
     setNotesOpen(true)
+    setSideTab('notes')
     setFreshNote(note.id)
   }, [view, setNotes])
   const updateNote = useCallback(
@@ -1644,6 +1649,12 @@ export function App(): JSX.Element {
               onChange={onChange}
               onCaret={onCaret}
               onReady={onReady}
+              onPick={(pick) => {
+                if (pick.kind !== 'character') return
+                setSideCharacter(characterKey(pick.name))
+                setSideTab('character')
+                setNotesOpen(true)
+              }}
             />
           </div>
           {panel === 'board' && (
@@ -1746,18 +1757,29 @@ export function App(): JSX.Element {
           )}
         </main>
         {notesOpen && panel === 'script' && (
-          <NotesPanel
-            blocks={blocks}
-            groups={noteGroups.groups}
-            loose={noteGroups.loose}
-            sceneLabel={(n) => (numberScenes || scenesLocked ? scenes[n]?.number ?? String(n + 1) : String(n + 1))}
-            fresh={freshNote}
-            onAdd={addNote}
-            onUpdate={updateNote}
-            onDelete={deleteNote}
-            onGo={focusSceneBlock}
-            onPin={pinNote}
-          />
+          <div className="side-panel">
+            <div className="seg side-tabs" role="group" aria-label="Painel lateral">
+              <button className="btn ghost" aria-pressed={sideTab === 'notes'} onClick={() => setSideTab('notes')}>Notas</button>
+              <button className="btn ghost" aria-pressed={sideTab === 'character'} onClick={() => setSideTab('character')}>Personagem</button>
+            </div>
+            {sideTab === 'notes' && (
+              <NotesPanel
+                blocks={blocks}
+                groups={noteGroups.groups}
+                loose={noteGroups.loose}
+                sceneLabel={(n) => (numberScenes || scenesLocked ? scenes[n]?.number ?? String(n + 1) : String(n + 1))}
+                fresh={freshNote}
+                onAdd={addNote}
+                onUpdate={updateNote}
+                onDelete={deleteNote}
+                onGo={focusSceneBlock}
+                onPin={pinNote}
+              />
+            )}
+            {sideTab === 'character' && (
+              <CharacterPanel script={{ ...scriptRef.current, blocks }} selected={sideCharacter} onSelect={setSideCharacter} onChange={setCharacters} flash={flash} />
+            )}
+          </div>
         )}
       </div>
 

@@ -224,3 +224,14 @@ export function presentationOf(sheet: CharacterSheet | null, name: string, stats
     empty: sheetIsEmpty(s)
   }
 }
+
+/**
+ * The sheets with `changes` made to the sheet of `name` (by its key: "MARINA (CONT.)" is MARINA), or with a new sheet
+ * for that name when there is none yet. Used by Relatórios and by the side panel of the script.
+ */
+export function setSheet(sheets: CharacterSheet[], name: string, changes: Partial<CharacterSheet>): CharacterSheet[] {
+  const key = characterKey(name)
+  const existing = sheets.find((s) => characterKey(s.name) === key)
+  if (existing) return sheets.map((s) => (s.id === existing.id ? { ...s, ...changes } : s))
+  return [...sheets, { ...newSheet(name.replace(/\s*\(.*\)\s*$/, '').trim()), ...changes }]
+}

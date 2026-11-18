@@ -50,6 +50,30 @@ async function catchReports(app: ElectronApplication): Promise<() => Promise<any
 }
 
 test.describe('F29 updates of 17/11', () => {
+  test('F29-H5 clicking a character name opens the sheet in the side panel; a name in the action does not', async ({ app, page, dialogs }) => {
+    await open(page, dialogs)
+    const panel = page.getByRole('region', { name: 'Ficha do personagem' })
+    // the name inside an action line is not a link
+    await page.locator('.sheet-content [data-kind="action"]', { hasText: 'Marina coa' }).click()
+    await expect(panel).toHaveCount(0)
+    await page.locator('.sheet-content [data-kind="character"]', { hasText: 'MARINA' }).click()
+    await expect(panel).toBeVisible()
+    await expect(panel.getByLabel('Personagem', { exact: true })).toHaveValue('MARINA')
+    // the click leaves the caret in the script: typing goes on in the text
+    await expect(page.getByRole('textbox', { name: 'Texto do roteiro' })).toBeFocused()
+    await panel.getByLabel('Idade', { exact: true }).fill('34')
+
+    // the same sheet in Relatórios
+    await menu(app, 'view-reports')
+    await page.getByRole('button', { name: 'Fichas de personagem' }).click()
+    await expect(page.locator('#cf-age')).toHaveValue('34')
+
+    // the notes are one tab away
+    await menu(app, 'view-script')
+    await page.getByRole('group', { name: 'Painel lateral' }).getByRole('button', { name: 'Notas' }).click()
+    await expect(page.getByRole('complementary', { name: 'Notas' })).toBeVisible()
+  })
+
   test('F29-H4 a long storyboard caption grows instead of scrolling', async ({ app, page, dialogs }) => {
     await open(page, dialogs)
     await menu(app, 'view-storyboard')

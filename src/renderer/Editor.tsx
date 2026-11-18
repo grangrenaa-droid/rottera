@@ -6,7 +6,7 @@ import History from '@tiptap/extension-history'
 import { TextSelection } from '@tiptap/pm/state'
 import type { Block, Extras, Kind } from '../shared/types'
 import { KINDS, LABELS } from '../shared/elements'
-import { collectLists, suggest } from '../shared/smarttype'
+import { collectLists, parseHeading, suggest } from '../shared/smarttype'
 import {
   BlockNode,
   RoteraExtensions,
@@ -50,12 +50,16 @@ export interface EditorHandle {
   revealBlock(index: number): void
 }
 
+/** A click on a character's name (its own line) or on the location of a scene heading: the side panel opens it. */
+export type EditorPick = { kind: 'character'; name: string } | { kind: 'location'; location: string }
+
 interface Props {
   initial: Block[]
   extras: Extras | undefined
   onChange(blocks: Block[]): void
   onCaret(info: CaretInfo): void
   onReady(handle: EditorHandle): void
+  onPick?(pick: EditorPick): void
 }
 
 interface Popup {
@@ -66,8 +70,10 @@ interface Popup {
   top: number
 }
 
-export function Editor({ initial, extras, onChange, onCaret, onReady }: Props): JSX.Element {
+export function Editor({ initial, extras, onChange, onCaret, onReady, onPick }: Props): JSX.Element {
   const [popup, setPopup] = useState<Popup | null>(null)
+  const pickRef = useRef(onPick)
+  pickRef.current = onPick
   const popupRef = useRef<Popup | null>(null)
   popupRef.current = popup
   const extrasRef = useRef<Extras | undefined>(extras)
@@ -120,6 +126,19 @@ export function Editor({ initial, extras, onChange, onCaret, onReady }: Props): 
         'aria-multiline': 'true',
         'aria-label': 'Texto do roteiro',
         'aria-describedby': 'editor-hint'
+      },
+      // a click keeps placing the caret as always; on a character's name or a heading's location it also opens it
+      handleClick: (view, pos) => {
+        const $p = view.state.doc.resolve(pos)
+        const node = $p.parent
+        const text = node.textContent
+        if (node.attrs.kind === 'character' && text.trim()) pickRef.current?.({ kind: 'character', name: text.trim() })
+        if (node.attrs.kind === 'scene_heading') {
+          const loc = parseHeading(text).location.trim()
+          const at = loc ? text.toUpperCase().indexOf(loc.toUpperCase()) : -1
+          if (at >= 0 && $p.parentOffset >= at && $p.parentOffset <= at + loc.length) pickRef.current?.({ kind: 'location', location: loc.toUpperCase() })
+        }
+        return false
       }
     },
     autofocus: 'end'
