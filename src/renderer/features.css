@@ -515,3 +515,5 @@ button.link:focus-visible { outline: 2px solid var(--color-focus-ring); outline-
 .people-window { display: grid; gap: 12px; }
 .people-tabs { justify-self: start; }
 .people-count { font-weight: 400; color: var(--color-text-muted); }
+.people-end { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.people-move { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }

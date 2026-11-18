@@ -138,26 +138,6 @@ export function PeopleView(p: Props): JSX.Element {
             <div className="people-main">
               <label htmlFor="pp-name">Nome</label>
               <input id="pp-name" maxLength={120} value={current.name} onChange={(e) => put({ name: e.target.value })} />
-              <fieldset>
-                <legend>Grupo</legend>
-                <div className="snd-choices">
-                  {(Object.keys(GROUPS) as Person['group'][]).map((g) => (
-                    <label key={g} className="check">
-                      <input
-                        type="radio"
-                        name="pp-group"
-                        checked={current.group === g}
-                        onChange={() => {
-                          put({ group: g })
-                          setGroup(g)
-                          setSel(current.id)
-                        }}
-                      />
-                      {GROUPS[g]}
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
               {current.group === 'cast' && (
                 <>
                   <label htmlFor="pp-char">Personagem</label>
@@ -239,9 +219,34 @@ export function PeopleView(p: Props): JSX.Element {
           <label htmlFor="pp-notes">Observações</label>
           <textarea id="pp-notes" rows={2} maxLength={2000} value={current.notes} onChange={(e) => put({ notes: e.target.value })} />
 
-          <button className="btn ghost small" onClick={remove}>
-            Apagar da lista
-          </button>
+          <div className="people-end">
+            <label className="people-move">
+              Mover para
+              <select
+                aria-label="Mover para outro grupo"
+                value=""
+                onChange={(e) => {
+                  const g = e.target.value as Person['group']
+                  if (!g) return
+                  put({ group: g })
+                  setGroup(g)
+                  setSel(current.id)
+                }}
+              >
+                <option value="">outro grupo…</option>
+                {(Object.keys(GROUPS) as Person['group'][])
+                  .filter((g) => g !== current.group)
+                  .map((g) => (
+                    <option key={g} value={g}>
+                      {GROUPS[g]}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <button className="btn ghost small" onClick={remove}>
+              Apagar da lista
+            </button>
+          </div>
         </section>
       ) : (
         <p className="muted">Acrescente em “{ADD[group]}”.</p>

@@ -135,7 +135,8 @@ test.describe('F29 updates of 17/11', () => {
     await page.getByRole('button', { name: '+ Pessoa da equipe' }).click()
     const form = page.getByRole('region', { name: /^Ficha de / })
     await form.getByLabel('Nome', { exact: true }).fill('Rafa')
-    await expect(form.getByRole('radio', { name: 'Equipe' })).toBeChecked()
+    // the group is the tab: no group choice at the top of the sheet
+    await expect(form.getByRole('radio', { name: 'Equipe' })).toHaveCount(0)
     await expect(form.getByLabel('Função')).toBeVisible()
     await expect(form.getByLabel('Personagem', { exact: true })).toHaveCount(0)
     await expect(list.getByRole('button')).toHaveText([/RAFA|Rafa/])
@@ -143,12 +144,18 @@ test.describe('F29 updates of 17/11', () => {
 
     await groups.getByRole('button', { name: /^Figuração/ }).click()
     await page.getByRole('button', { name: '+ Figurante' }).click()
-    await expect(page.getByRole('region', { name: /^Ficha de / }).getByRole('radio', { name: 'Figuração' })).toBeChecked()
+    await expect(groups.getByRole('button', { name: /^Figuração/ })).toContainText('1')
 
     // each tab lists only its own people
     await groups.getByRole('button', { name: /^Elenco/ }).click()
     await expect(list.getByRole('button')).toHaveCount(0)
     await expect(page.getByRole('button', { name: '+ Ator ou atriz' })).toBeVisible()
+
+    // moving someone to another group, at the end of the sheet: the tab follows them
+    await groups.getByRole('button', { name: /^Equipe/ }).click()
+    await page.getByLabel('Mover para outro grupo').selectOption('cast')
+    await expect(groups.getByRole('button', { name: /^Elenco/ })).toHaveAttribute('aria-pressed', 'true')
+    await expect(list.getByRole('button')).toHaveText([/RAFA|Rafa/])
   })
 
   test('F29-H10 a break is dragged between two shots, or put after a scene, and the day sheet follows', async ({ app, page, dialogs, userData }) => {
