@@ -1345,6 +1345,10 @@ function lightAndShadowSvg(map: LightMap): { under: string; over: string } {
       )
       out +=
         `<g data-sun="${escapeXml(it.id)}" clip-path="url(#${clip})" pointer-events="none">` +
+        // where the other lights shine, the sun's tint and its shadow are both gone: only their own light is there,
+        // so the colours never mix into a grey that reads as shade. The mask that clears them is only known once all
+        // the lights are drawn, so a mark stands for it here
+        `\u0001${escapeXml(it.id)}\u0001` +
         `<mask id="ls-sun-${id}"><rect x="0" y="0" width="${W}" height="${H}" fill="#ffffff"/>${poly(shadows, '#000000')}</mask>` +
         `<rect x="0" y="0" width="${W}" height="${H}" fill="${color}" fill-opacity="0.12" mask="url(#ls-sun-${id})"/>` +
         (softened
@@ -1357,9 +1361,6 @@ function lightAndShadowSvg(map: LightMap): { under: string; over: string } {
             dapples(`ls-dapple-${id}`, color) +
             `<g data-cookie="${escapeXml(it.id)}" mask="url(#ls-cut-${id})"><rect x="0" y="0" width="${W}" height="${H}" fill="url(#ls-dapple-${id})" fill-opacity="0.3"/></g>`
           : '') +
-        // where the other lights shine the shadow is gone: the mask that clears it is only known once they are all
-        // drawn, so a mark stands for it here
-        `\u0001${escapeXml(it.id)}\u0001` +
         (patterned
           ? // the shadow is only where neither the softened nor the patterned light gets
             `<mask id="ls-dark-${id}"><rect x="0" y="0" width="${W}" height="${H}" fill="#000000"/>${poly(patch, '#ffffff')}</mask>` +

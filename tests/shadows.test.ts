@@ -465,3 +465,15 @@ describe("where a light shines, the sun's shadow is gone", () => {
     expect(a).not.toBe(b)
   })
 })
+
+describe("a light's beam over the sun never looks darker than the sun", () => {
+  it("the sun's own tint is cleared under other lights too, so their colours do not mix into a grey", () => {
+    const svg = lightMapSvg({
+      ...newLightMap('Sala'), id: 'sala', width: 8, height: 6, shadows: true,
+      items: [{ ...newItem('sun', 7.5, 5.5), id: 'sol' }, { ...newItem('fresnel', 1.5, 4.5), id: 'luz', rotation: 30, range: 3 }]
+    })
+    const clear = svg.indexOf('data-sun-clear="sol"')
+    expect(clear).toBeGreaterThan(-1)
+    expect(clear).toBeLessThan(svg.indexOf('fill-opacity="0.12" mask="url(#ls-sun-'))
+  })
+})
