@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { blockers, insidePolygon, litArea, propOutline, reaches, reflectDirection, sunReaches, sunRotation, sunShadows, wallSegments } from '../src/shared/shadows'
+import { blockers, diffusedBeam, insidePolygon, litArea, propOutline, reaches, reflectDirection, reflectedBeam, sunReaches, sunRotation, sunShadows, wallSegments } from '../src/shared/shadows'
 import { cleanLightMap, lightMapSvg, newItem, newLightMap } from '../src/shared/lightmap'
 import type { LightMap } from '../src/shared/types'
 
@@ -358,5 +358,50 @@ describe('finishing (Etapa 4)', () => {
     const t0 = performance.now()
     for (let k = 0; k < 3; k++) lightMapSvg(map, { interactive: true })
     expect((performance.now() - t0) / 3).toBeLessThan(40)
+  })
+})
+
+describe('a light comes out of its whole face: a trapezoid, not a triangle', () => {
+  const conePoints = (svg: string): { x: number; y: number }[] =>
+    /<polygon points="([^"]+)" fill="[^"]+" fill-opacity="0\.16" pointer-events="none" stroke/.exec(svg)![1].split(' ').map((p) => {
+      const [x, y] = p.split(',').map(Number)
+      return { x, y }
+    })
+  const plain = (it: LightMap['items'][number]): string => lightMapSvg({ ...newLightMap('Sala'), id: 'sala', width: 8, height: 6, items: [it] })
+
+  it('a softbox beam starts as wide as its front', () => {
+    const p = conePoints(plain({ ...newItem('softbox', 4, 4), id: 's' }))
+    expect(p).toHaveLength(4)
+    expect(Math.abs(p[3].x - p[0].x)).toBeCloseTo(38)
+    expect(p[0].y).toBeCloseTo(p[3].y)
+  })
+
+  it('a tube starts as long as the tube; a camera still sees from a point', () => {
+    const p = conePoints(plain({ ...newItem('tube', 4, 4), id: 't', length: 1.2 }))
+    expect(Math.abs(p[3].x - p[0].x)).toBeCloseTo(72)
+    expect(conePoints(plain({ ...newItem('camera', 4, 4), id: 'c' }))).toHaveLength(3)
+  })
+
+  it('the lit area starts at the face: right in front of its edge is lit, behind it is not', () => {
+    const wide = { x: 4, y: 5, rotation: 0, spread: 40, range: 3, width: 1 }
+    const area = litArea(wide, [])
+    expect(insidePolygon({ x: 4.45, y: 4.9 }, area)).toBe(true)
+    expect(insidePolygon({ x: 4, y: 5.2 }, area)).toBe(false)
+    expect(insidePolygon({ x: 4.45, y: 4.9 }, litArea({ ...wide, width: 0 }, []))).toBe(false)
+    expect(reaches(wide, { x: 4.45, y: 4.9 }, [])).toBe(true)
+    expect(reaches(wide, { x: 4, y: 5.2 }, [])).toBe(false)
+  })
+
+  it('a wall just behind a wide light does not hide it', () => {
+    const softbox = { x: 4, y: 5, rotation: 0, spread: 70, range: 3, width: 0.9 }
+    const behind = { x1: 3, y1: 5.2, x2: 5, y2: 5.2 }
+    expect(reaches(softbox, { x: 4, y: 3 }, [behind])).toBe(true)
+    expect(insidePolygon({ x: 4, y: 3 }, litArea(softbox, [behind]))).toBe(true)
+  })
+
+  it('reflectors, bounces and diffusers pass the light on as wide as they look from where it goes', () => {
+    expect(reflectedBeam({ x: 4, y: 3, rotation: 45, type: 'reflector', length: 0.9 }, { x: 0, y: -1 }, 3).width).toBeCloseTo(0.9 * Math.SQRT1_2)
+    expect(reflectedBeam({ x: 4, y: 3, rotation: 0, type: 'bounce', length: 1.2 }, { x: 0, y: -1 }, 3).width).toBeCloseTo(1.2)
+    expect(diffusedBeam({ x: 4, y: 3, rotation: 0, type: 'diffuser', length: 1 }, { x: 0, y: -1 }, 3).width).toBeCloseTo(1)
   })
 })

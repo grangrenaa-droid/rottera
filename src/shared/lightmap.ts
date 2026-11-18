@@ -602,14 +602,18 @@ export const escapeXml = (s: string): string =>
 
 const f = (n: number): string => (Math.round(n * 100) / 100).toString()
 
-function coneSvg(spread: number, range: number, color: string, fromY: number): string {
+/** A beam from a face `width` px wide (a trapezoid), or from a point when it has none (a triangle, like a camera's view). */
+function coneSvg(spread: number, range: number, color: string, fromY: number, width = 0): string {
   const r = range * S
   const a = (spread / 2) * (Math.PI / 180)
-  const lx = -Math.sin(a) * r
-  const rx = Math.sin(a) * r
+  const h = width / 2
+  const lx = -h - Math.sin(a) * r
+  const rx = h + Math.sin(a) * r
   const y = fromY - Math.cos(a) * r
+  const near = h > 0 ? `${f(-h)},${f(fromY)}` : `0,${f(fromY)}`
+  const far = `${f(lx)},${f(y)} ${f(rx)},${f(y)}`
   return (
-    `<polygon points="0,${f(fromY)} ${f(lx)},${f(y)} ${f(rx)},${f(y)}" fill="${color}" fill-opacity="0.16" pointer-events="none" ` +
+    `<polygon points="${near} ${far}${h > 0 ? ` ${f(h)},${f(fromY)}` : ''}" fill="${color}" fill-opacity="0.16" pointer-events="none" ` +
     `stroke="${color}" stroke-width="1" stroke-dasharray="5 4"/>`
   )
 }
@@ -1057,6 +1061,11 @@ function movementSvg(it: LightItem, interactive: boolean, selected: boolean): { 
 /** Where the beam of each kind of piece starts, in drawing units ahead of its centre (negative = ahead). */
 const FRONTS: Partial<Record<LightItemType, number>> = { camera: -19, sun: 0, softbox: -10, tube: -3, kino: -8, skypanel: -8, ellipsoidal: -14, dedo: -9, moon: 0, par: -13 }
 const frontOf = (t: LightItemType): number => FRONTS[t] ?? -12
+/** How wide each light's front is as drawn, in px: the beam leaves it all (a tube: its length). */
+const FACES: Partial<Record<LightItemType, number>> = {
+  fresnel: 24, led: 34, hmi: 14, softbox: 38, sun: 40, par: 22, ellipsoidal: 10, kino: 34, dedo: 20, skypanel: 44, moon: 40
+}
+const faceOf = (it: LightItem): number => (it.type === 'tube' ? (it.length ?? ITEM_DEFS.tube.length ?? 1.2) * S : FACES[it.type] ?? 0)
 
 /** `ownBeam` false: the light's beam is drawn by the light-and-shadow layer instead (the map has shadows on). */
 function itemSvg(it: LightItem, opts: SvgOptions, number?: number, ownBeam = true): { svg: string; view: string } {
@@ -1065,7 +1074,7 @@ function itemSvg(it: LightItem, opts: SvgOptions, number?: number, ownBeam = tru
   const y = it.y * S
   let cone = ''
   if (d.cone && (ownBeam || it.type === 'camera')) {
-    cone = coneSvg(spreadOf(it), it.range ?? d.cone.range, it.type === 'camera' ? d.cone.color : beamColor(it), frontOf(it.type))
+    cone = coneSvg(spreadOf(it), it.range ?? d.cone.range, it.type === 'camera' ? d.cone.color : beamColor(it), frontOf(it.type), faceOf(it))
   }
   const isCamera = it.type === 'camera'
   const selected = opts.selectedId === it.id
@@ -1357,7 +1366,7 @@ function lightAndShadowSvg(map: LightMap): { under: string; over: string } {
     const beam: ShadowBeam =
       round !== undefined
         ? { x: it.x, y: it.y, rotation: 0, spread: 360, range: it.range ?? round }
-        : { x: it.x, y: it.y, rotation: it.rotation, spread: spreadOf(it), range: it.range ?? d.cone!.range, from: -frontOf(it.type) / S }
+        : { x: it.x, y: it.y, rotation: it.rotation, spread: spreadOf(it), range: it.range ?? d.cone!.range, from: -frontOf(it.type) / S, width: faceOf(it) / S }
     const o = { x: beam.x + pointing(beam.rotation).x * (beam.from ?? 0), y: beam.y + pointing(beam.rotation).y * (beam.from ?? 0) }
     // a lamp standing on a table is not hidden by it
     const under = propsUnder(map, o)

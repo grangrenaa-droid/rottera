@@ -180,19 +180,29 @@ export function reflectDirection(v: Pt, rotation: number): Pt {
  * left. A reflector is a mirror: a narrow beam the mirror way. A bounce scatters it: a wide, shorter beam straight off
  * its face, on the side the light came from.
  */
-export function reflectedBeam(mod: { x: number; y: number; rotation: number; type: LightItemType }, incoming: Pt, range: number): Beam {
+type Flat = { x: number; y: number; rotation: number; type: LightItemType; length?: number }
+
+/** How wide a flat piece looks from where its light goes: its length across that way. */
+function across(mod: Flat, dir: Pt): number {
+  const a = (mod.rotation * Math.PI) / 180
+  const len = mod.length ?? MODIFIERS[mod.type]?.length ?? 0.9
+  return len * Math.abs(Math.cos(a) * dir.y - Math.sin(a) * dir.x)
+}
+
+export function reflectedBeam(mod: Flat, incoming: Pt, range: number): Beam {
   if (mod.type !== 'bounce') {
-    return { x: mod.x, y: mod.y, rotation: rotationOf(reflectDirection(incoming, mod.rotation)), spread: 30, range: Math.max(1.5, range) }
+    const r = reflectDirection(incoming, mod.rotation)
+    return { x: mod.x, y: mod.y, rotation: rotationOf(r), spread: 30, range: Math.max(1.5, range), width: across(mod, r) }
   }
   const a = (mod.rotation * Math.PI) / 180
   let n = { x: -Math.sin(a), y: Math.cos(a) }
   if (n.x * incoming.x + n.y * incoming.y > 0) n = { x: -n.x, y: -n.y }
-  return { x: mod.x, y: mod.y, rotation: rotationOf(n), spread: 120, range: Math.max(2.5, range * 0.8) }
+  return { x: mod.x, y: mod.y, rotation: rotationOf(n), spread: 120, range: Math.max(2.5, range * 0.8), width: across(mod, n) }
 }
 
 /** The light a diffuser spreads on when light going along `incoming` goes through it: wide and soft, the same way on. */
-export function diffusedBeam(mod: { x: number; y: number }, incoming: Pt, range: number): Beam {
-  return { x: mod.x, y: mod.y, rotation: rotationOf(incoming), spread: 90, range: Math.max(1.5, range) }
+export function diffusedBeam(mod: Flat, incoming: Pt, range: number): Beam {
+  return { x: mod.x, y: mod.y, rotation: rotationOf(incoming), spread: 90, range: Math.max(1.5, range), width: across(mod, incoming) }
 }
 
 /** How far along a ray (from o, direction v of length 1) it meets a segment; Infinity when it does not. */
@@ -225,6 +235,22 @@ export interface Beam {
   range: number
   /** How far ahead of the piece's centre the beam starts, in metres. */
   from?: number
+  /** How wide the face the light comes out of is, in metres: the beam starts that wide (0, or none: from a point). */
+  width?: number
+}
+
+/**
+ * Where a beam's rays come from: a point behind its face (`back` metres behind), so the rays leave the face's whole
+ * width at the beam's opening. A light shining all round, or one opening almost flat, comes from its centre.
+ */
+function source(b: Beam): { apex: Pt; dir: Pt; back: number; half: number; round: boolean } {
+  const dir = pointing(b.rotation)
+  const round = b.spread >= 359.5
+  const half = round ? Math.PI : (b.spread / 2) * (Math.PI / 180)
+  const o = { x: b.x + dir.x * (b.from ?? 0), y: b.y + dir.y * (b.from ?? 0) }
+  const w = b.width ?? 0
+  const back = round || w <= 0 || half >= (85 * Math.PI) / 180 ? 0 : w / 2 / Math.tan(Math.max(half, Math.PI / 360))
+  return { apex: { x: o.x - dir.x * back, y: o.y - dir.y * back }, dir, back, half, round }
 }
 
 /**
@@ -232,12 +258,11 @@ export interface Beam {
  * far as its reach or the first wall. The points go round the area, starting at the light (unless it shines all round).
  */
 export function litArea(b: Beam, all: Segment[]): Pt[] {
-  const dir = pointing(b.rotation)
-  const o = { x: b.x + dir.x * (b.from ?? 0), y: b.y + dir.y * (b.from ?? 0) }
+  const { apex: o, dir, back, half, round } = source(b)
+  // how far along a ray (`d` off the axis) the face is: nothing before it stops the light
+  const face = (d: number): number => (back > 0 ? back / Math.cos(d) : 0)
   // only what is within reach can stop a ray
-  const walls = all.filter((s) => distanceTo(o, s) <= b.range)
-  const round = b.spread >= 359.5
-  const half = round ? Math.PI : (b.spread / 2) * (Math.PI / 180)
+  const walls = all.filter((s) => distanceTo(o, s) <= face(half) + b.range)
   const a0 = Math.atan2(dir.y, dir.x)
   const steps = Math.max(4, Math.ceil(round ? 360 : b.spread))
   const angles: number[] = []
@@ -253,16 +278,20 @@ export function litArea(b: Beam, all: Segment[]): Pt[] {
     }
   }
   angles.sort((x, y) => x - y)
+  const at = (d: number, t: number): Pt => ({ x: o.x + Math.cos(a0 + d) * t, y: o.y + Math.sin(a0 + d) * t })
   const pts = angles.map((d) => {
     const v = { x: Math.cos(a0 + d), y: Math.sin(a0 + d) }
-    let t = b.range
+    const start = face(d)
+    let t = start + b.range
     for (const s of walls) {
       const h = hit(o, v, s)
-      if (h < t) t = h
+      if (h > start + 1e-9 && h < t) t = h
     }
-    return { x: o.x + v.x * t, y: o.y + v.y * t }
+    return at(d, t)
   })
-  return round ? pts : [o, ...pts]
+  if (round) return pts
+  // a face with a width: the area starts along it (a trapezoid); from a point it starts at the point (a triangle)
+  return back > 0 ? [at(angles[0], face(angles[0])), ...pts, at(angles[angles.length - 1], face(angles[angles.length - 1]))] : [o, ...pts]
 }
 
 /** How far a point is from a segment. */
@@ -274,12 +303,15 @@ function distanceTo(p: Pt, s: Segment): number {
   return Math.hypot(p.x - (s.x1 + t * wx), p.y - (s.y1 + t * wy))
 }
 
-/** Whether nothing stands on the way from `o` to `p`. */
-function clear(o: Pt, p: Pt, walls: Segment[]): boolean {
+/** Whether nothing stands on the way from `o` to `p`, past the first `skip` metres. */
+function clear(o: Pt, p: Pt, walls: Segment[], skip = 0): boolean {
   const dist = Math.hypot(p.x - o.x, p.y - o.y)
   if (dist < 1e-9) return true
   const v = { x: (p.x - o.x) / dist, y: (p.y - o.y) / dist }
-  return walls.every((s) => hit(o, v, s) >= dist - 1e-9)
+  return walls.every((s) => {
+    const h = hit(o, v, s)
+    return h <= skip + 1e-9 || h >= dist - 1e-9
+  })
 }
 
 /**
@@ -287,15 +319,18 @@ function clear(o: Pt, p: Pt, walls: Segment[]): boolean {
  * as being inside its lit area, for much less work).
  */
 export function reaches(b: Beam, p: Pt, walls: Segment[]): boolean {
-  const dir = pointing(b.rotation)
-  const o = { x: b.x + dir.x * (b.from ?? 0), y: b.y + dir.y * (b.from ?? 0) }
+  const { apex: o, dir, back, half, round } = source(b)
   const dist = Math.hypot(p.x - o.x, p.y - o.y)
-  if (dist > b.range) return false
-  if (b.spread < 359.5 && dist > 1e-9) {
+  let start = 0
+  if (!round && dist > 1e-9) {
     const off = Math.abs(wrap(Math.atan2(p.y - o.y, p.x - o.x) - Math.atan2(dir.y, dir.x)))
-    if (off > (b.spread / 2) * (Math.PI / 180) + 1e-9) return false
+    if (off > half + 1e-9) return false
+    // in front of the face, not between it and the point the rays come from
+    start = back > 0 ? back / Math.cos(off) : 0
+    if (dist < start - 1e-9) return false
   }
-  return clear(o, p, walls)
+  if (dist > start + b.range) return false
+  return clear(o, p, walls, start)
 }
 
 /** Whether the sun (or the moon) pointing `rotation` gets to a point: nothing between it and the sun's side. */
