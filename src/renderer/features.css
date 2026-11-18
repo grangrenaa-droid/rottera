@@ -468,3 +468,17 @@ button.link:focus-visible { outline: 2px solid var(--color-focus-ring); outline-
 .side-char input, .side-char select, .side-char textarea { width: 100%; }
 .side-photo { width: 100%; aspect-ratio: 4 / 3; display: grid; place-items: center; overflow: hidden; border: 1px solid var(--color-border-input); border-radius: var(--radius-sm); background: var(--color-bg); }
 .side-photo img { width: 100%; height: 100%; object-fit: cover; }
+
+/* a location's sheet (Filmagem → Locações, and the side panel) */
+.loc-form { display: grid; gap: 8px; }
+.loc-form fieldset { border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 8px 12px 12px; margin: 0; display: grid; gap: 6px; }
+.loc-form legend { font-weight: 700; padding: 0 4px; }
+.loc-field { display: grid; gap: 2px; }
+.loc-field label { font-size: 12px; font-weight: 600; }
+.loc-field input, .loc-field textarea { width: 100%; }
+.loc-field textarea { field-sizing: content; min-height: 52px; resize: none; }
+.loc-photos { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+.loc-photos li { position: relative; display: grid; gap: 4px; }
+.loc-photos img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--radius-sm); border: 1px solid var(--color-border-input); }
+.loc-photos .icon { position: absolute; top: 4px; right: 4px; background: var(--color-surface); }
+.side-title { font-size: 15px; margin: 0; }

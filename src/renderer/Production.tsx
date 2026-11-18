@@ -1,5 +1,6 @@
 import { useMemo, useState, type DragEvent } from 'react'
-import type { BreakKind, BreakdownCategory, Frame, Production, ShootDay } from '../shared/types'
+import type { BreakKind, BreakdownCategory, Frame, LocationSheet, Production, ShootDay } from '../shared/types'
+import { LocationsView } from './Locations'
 import type { Report } from '../shared/reports'
 import type { DaySound } from '../shared/production'
 import { reportToCsv } from '../shared/reports'
@@ -68,9 +69,13 @@ interface Props {
   daySound?: DaySound
   /** The Luz window's sun of a day, on one line, for its day sheet ('' when the day has no date or place). */
   daySunLine?(day: ShootDay): string
+  /** Filmagem → Locações. */
+  locations: Record<string, LocationSheet>
+  onLocations(l: Record<string, LocationSheet>): void
+  flash(text: string): void
 }
 
-type Tab = 'breakdown' | 'plan'
+type Tab = 'breakdown' | 'plan' | 'locations'
 
 export function ProductionView(p: Props): JSX.Element {
   const [tab, setTab] = useState<Tab>('breakdown')
@@ -83,8 +88,13 @@ export function ProductionView(p: Props): JSX.Element {
         <button className="btn ghost" aria-pressed={tab === 'plan'} onClick={() => setTab('plan')}>
           Plano de filmagem
         </button>
+        <button className="btn ghost" aria-pressed={tab === 'locations'} onClick={() => setTab('locations')}>
+          Locações
+        </button>
       </div>
-      {p.scenes.length === 0 ? (
+      {tab === 'locations' ? (
+        <LocationsView scenes={p.scenes} locations={p.locations} onChange={p.onLocations} onExportPdf={p.onExportPdf} onExportCsv={p.onExportCsv} flash={p.flash} />
+      ) : p.scenes.length === 0 ? (
         <p className="muted">Ainda não há cenas no roteiro. Escreva um cabeçalho (INT. ou EXT.) para começar.</p>
       ) : tab === 'breakdown' ? (
         <Breakdown {...p} />

@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { Beat, Block, Board, CharacterSheet, Extras, Kind, LightMap, Note, Lighting, Paper, Production, RevisionState, Script, Sound, Storyboard, TableRead, TitlePage, Watermark } from '../shared/types'
+import type { Beat, Block, Board, CharacterSheet, Extras, Kind, LightMap, Note, Lighting, LocationSheet, Paper, Production, RevisionState, Script, Sound, Storyboard, TableRead, TitlePage, Watermark } from '../shared/types'
 import { emptyScript, emptyStoryboard } from '../shared/types'
 import { LABELS } from '../shared/elements'
 import { LONG_SCRIPT_BLOCKS, LONG_SCRIPT_DELAY, paginate, type PageLine } from '../shared/paginate'
@@ -14,6 +14,8 @@ import { groupNotes, noteMarks } from '../shared/notes'
 import { newId } from '../shared/structures'
 import { NotesPanel } from './Notes'
 import { CharacterPanel } from './CharacterPanel'
+import { LocationForm } from './LocationForm'
+import { setLocation } from '../shared/locations'
 import { ReadBar } from './ReadBar'
 import { emptyProduction, sceneInfo } from '../shared/production'
 import { printable, type Report } from '../shared/reports'
@@ -328,6 +330,7 @@ export function App(): JSX.Element {
   const [lightMaps, setLightMapsState] = useState<LightMap[]>([])
   const [sound, setSoundState] = useState<Sound | undefined>(undefined)
   const [lighting, setLightingState] = useState<Lighting | undefined>(undefined)
+  const [locations, setLocationsState] = useState<Record<string, LocationSheet> | undefined>(undefined)
   const [paper, setPaperState] = useState<Paper>('letter')
   const [characters, setCharactersState] = useState<CharacterSheet[]>([])
   const [extras, setExtras] = useState<Extras | undefined>(undefined)
@@ -352,6 +355,7 @@ export function App(): JSX.Element {
   /** What the side panel beside the script shows, and which character (by key) or location is open in it. */
   const [sideTab, setSideTab] = useState<'notes' | 'character' | 'location'>('notes')
   const [sideCharacter, setSideCharacter] = useState<string | null>(null)
+  const [sideLocation, setSideLocation] = useState<string | null>(null)
   const [readOpen, setReadOpen] = useState(false)
   /** Why the last copy to the copy folder failed, or null. */
   const [copyFailed, setCopyFailed] = useState<string | null>(null)
@@ -412,7 +416,7 @@ export function App(): JSX.Element {
   const timer = useRef<number | null>(null)
   const claudeTimer = useRef<number | null>(null)
 
-  scriptRef.current = { titlePage, blocks, board, storyboard, lightMaps, paper, characters, extras, revision, scenesLocked, numberScenes, watermark, notes, production, tableRead, sound, lighting }
+  scriptRef.current = { titlePage, blocks, board, storyboard, lightMaps, paper, characters, extras, revision, scenesLocked, numberScenes, watermark, notes, production, tableRead, sound, lighting, locations }
   pathRef.current = path
 
   // ------------------------------------------------------------ theme
@@ -593,6 +597,16 @@ export function App(): JSX.Element {
     [putLightMaps]
   )
 
+  const putLocations = useCallback(
+    (l: Record<string, LocationSheet>) => {
+      const next = Object.keys(l).length ? l : undefined
+      scriptRef.current = { ...scriptRef.current, locations: next }
+      setLocationsState(next)
+      scheduleAutosave()
+    },
+    [scheduleAutosave]
+  )
+
   const putLighting = useCallback(
     (l: Lighting) => {
       scriptRef.current = { ...scriptRef.current, lighting: l }
@@ -672,6 +686,7 @@ export function App(): JSX.Element {
     setLightMapsState(s.lightMaps ?? [])
     setSoundState(s.sound ? reconcileSound(s.sound, s.lightMaps ?? []) : undefined)
     setLightingState(s.lighting)
+    setLocationsState(s.locations)
     setCharactersState(s.characters ?? [])
     // files made before the paper option are letter; new scripts follow the system language (A4 for Brazil)
     setPaperState(s.paper ?? (p === null && isBrazilian() ? 'a4' : 'letter'))
@@ -1650,9 +1665,13 @@ export function App(): JSX.Element {
               onCaret={onCaret}
               onReady={onReady}
               onPick={(pick) => {
-                if (pick.kind !== 'character') return
-                setSideCharacter(characterKey(pick.name))
-                setSideTab('character')
+                if (pick.kind === 'character') {
+                  setSideCharacter(characterKey(pick.name))
+                  setSideTab('character')
+                } else {
+                  setSideLocation(pick.location)
+                  setSideTab('location')
+                }
                 setNotesOpen(true)
               }}
             />
@@ -1727,6 +1746,9 @@ export function App(): JSX.Element {
               onExportPdf={exportReportPdf}
               onExportCsv={exportCsv}
               daySound={daySound}
+              locations={locations ?? {}}
+              onLocations={putLocations}
+              flash={flash}
               daySunLine={(d) => {
                 const sun = daySun(d, lighting ?? emptyLighting()).sun
                 return sun ? daySunLine(sun) : ''
@@ -1761,6 +1783,7 @@ export function App(): JSX.Element {
             <div className="seg side-tabs" role="group" aria-label="Painel lateral">
               <button className="btn ghost" aria-pressed={sideTab === 'notes'} onClick={() => setSideTab('notes')}>Notas</button>
               <button className="btn ghost" aria-pressed={sideTab === 'character'} onClick={() => setSideTab('character')}>Personagem</button>
+              <button className="btn ghost" aria-pressed={sideTab === 'location'} onClick={() => setSideTab('location')}>Locação</button>
             </div>
             {sideTab === 'notes' && (
               <NotesPanel
@@ -1778,6 +1801,24 @@ export function App(): JSX.Element {
             )}
             {sideTab === 'character' && (
               <CharacterPanel script={{ ...scriptRef.current, blocks }} selected={sideCharacter} onSelect={setSideCharacter} onChange={setCharacters} flash={flash} />
+            )}
+            {sideTab === 'location' && (
+              <div className="side-char">
+                {sideLocation ? (
+                  <>
+                    <h2 className="side-title">{sideLocation}</h2>
+                    <LocationForm
+                      name={sideLocation}
+                      sheet={locations?.[sideLocation]}
+                      idPrefix="side-loc"
+                      flash={flash}
+                      onChange={(patch) => putLocations(setLocation(locations ?? {}, sideLocation, patch))}
+                    />
+                  </>
+                ) : (
+                  <p className="muted">Clique no nome do local num cabeçalho de cena (INT. COZINHA - DIA) para abrir a ficha da locação aqui.</p>
+                )}
+              </div>
             )}
           </div>
         )}

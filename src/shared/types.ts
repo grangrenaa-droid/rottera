@@ -278,6 +278,8 @@ export interface Script {
   sound?: Sound
   /** The Luz window: a light sheet per scene, the place for the sun, the light equipment list. */
   lighting?: Lighting
+  /** Filmagem → Locações: the technical sheet of each location, by its name as the headings write it (COZINHA). */
+  locations?: Record<string, LocationSheet>
 }
 
 /** A voice installed on the computer (its name) and a pitch, 1 = as it is. */
@@ -505,6 +507,34 @@ export interface Lighting {
   place?: Place
   equipment: EquipItem[]
   equipState: Record<string, EquipState>
+}
+
+/** A scouting photo of a location. */
+export interface LocationPhoto {
+  id: string
+  /** data:image/... URL, already downscaled by the app. */
+  image: string
+  caption: string
+}
+
+/** The technical sheet of a location (Filmagem → Locações). */
+export interface LocationSheet {
+  address: string
+  /** Who answers for the place. */
+  contact: string
+  phone: string
+  permit?: 'pending' | 'granted' | 'refused'
+  /** "R$ 800 por dia". */
+  cost: string
+  /** When shooting is allowed there. */
+  hours: string
+  power: string
+  parking: string
+  /** Bathroom, dressing room, a place for the crew. */
+  support: string
+  noise: string
+  notes: string
+  photos: LocationPhoto[]
 }
 
 export interface ScriptFile {
