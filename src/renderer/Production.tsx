@@ -1,5 +1,5 @@
-import { useMemo, useState, type DragEvent } from 'react'
-import type { BreakKind, BreakdownCategory, Frame, LocationSheet, Person, Production, ShootDay } from '../shared/types'
+import { Fragment, useMemo, useState, type DragEvent } from 'react'
+import type { BreakKind, BreakdownCategory, Frame, LocationSheet, MealBreak, Person, Production, ShootDay } from '../shared/types'
 import { LocationsView } from './Locations'
 import { PeopleView } from './People'
 import { scheduleConflicts } from '../shared/people'
@@ -10,6 +10,7 @@ import {
   BREAK_KINDS,
   CATEGORIES,
   addBreak,
+  placeBreak,
   removeBreak,
   updateBreak,
   ITEM_MAX,
@@ -282,9 +283,17 @@ function Plan(p: Props): JSX.Element {
     if (s.id) p.onChange(moveShot(prod, s.id, shotIds(s), shot.id, dayId))
   }
   const byId = (id: string | null): SceneInfo | undefined => p.scenes.find((s) => s.id === id)
+  // a meal break being dragged: dropped on a scene it goes after it, on a shot after the shot, on the day by its time
+  const [dragBreak, setDragBreak] = useState<{ dayId: string; id: string } | null>(null)
+  const placeTo = (dayId: string | null, after: MealBreak['after'] | null): void => {
+    const b = dragBreak
+    setDragBreak(null)
+    if (b && dayId) p.onChange(placeBreak(prod, b.dayId, b.id, dayId, after))
+  }
   const drop = (e: DragEvent, dayId: string | null, at?: number): void => {
     e.preventDefault()
     e.stopPropagation()
+    if (dragBreak) return placeTo(dayId, null)
     const d = dragging
     setDragging(null)
     const s = d && byId(d.id)
@@ -302,6 +311,89 @@ function Plan(p: Props): JSX.Element {
     const id = p.sceneId(s)
     if (id) p.onChange(splitDay(prod, dayId, id))
   }
+
+  /** A meal break of a day: its kind, time, length and place; dragged to a place between scenes or shots. */
+  const breakChip = (d: ShootDay, n: number, b: MealBreak): JSX.Element => {
+    const i = (d.breaks ?? []).indexOf(b)
+    const who = `pausa ${i + 1} de ${dayLabel(d, n)}`
+    const place = b.after ? (b.after.shot ? `p:${b.after.scene}:${b.after.shot}` : `s:${b.after.scene}`) : ''
+    const still = { draggable: false, onDragStart: (e: DragEvent) => e.preventDefault() }
+    return (
+      <div
+        key={b.id}
+        className="plan-break"
+        draggable
+        title="Arraste para entre as cenas ou entre os planos"
+        onDragStart={(e) => {
+          e.stopPropagation()
+          setDragBreak({ dayId: d.id, id: b.id })
+          e.dataTransfer.setData('text/plain', 'pausa')
+        }}
+        onDragEnd={() => setDragBreak(null)}
+      >
+        <span className="plan-break-grip" aria-hidden="true">
+          ⠿
+        </span>
+        <select aria-label={`Tipo da ${who}`} value={b.kind} onChange={(ev) => p.onChange(updateBreak(prod, d.id, b.id, { kind: ev.target.value as BreakKind }))} {...still}>
+          {(Object.keys(BREAK_KINDS) as BreakKind[]).map((k) => (
+            <option key={k} value={k}>
+              {BREAK_KINDS[k]}
+            </option>
+          ))}
+        </select>
+        <input type="time" aria-label={`Horário da ${who}`} value={b.time} onChange={(ev) => p.onChange(updateBreak(prod, d.id, b.id, { time: ev.target.value }))} {...still} />
+        <label className="plan-break-min">
+          <input
+            type="number"
+            min={5}
+            max={600}
+            step={5}
+            aria-label={`Minutos da ${who}`}
+            value={b.minutes}
+            onChange={(ev) => {
+              const v = Math.round(Number(ev.target.value))
+              if (v >= 1 && v <= 600) p.onChange(updateBreak(prod, d.id, b.id, { minutes: v }))
+            }}
+            {...still}
+          />
+          min
+        </label>
+        <select
+          aria-label={`Lugar da ${who}`}
+          value={place}
+          onChange={(ev) => {
+            const [k, scene, shot] = ev.target.value.split(':')
+            p.onChange(placeBreak(prod, d.id, b.id, d.id, k === 's' ? { scene } : k === 'p' ? { scene, shot } : null))
+          }}
+          {...still}
+        >
+          <option value="">Pelo horário</option>
+          {dayScenes(d, p.scenes).map((sc) =>
+            sc.id ? (
+              <Fragment key={sc.index}>
+                <option value={`s:${sc.id}`}>Depois da cena {sc.number}</option>
+                {entryOf(sc, prod, shots, d).shots.map((sh) => (
+                  <option key={sh.id} value={`p:${sc.id}:${sh.id}`}>
+                    Depois do plano {sh.code}
+                  </option>
+                ))}
+              </Fragment>
+            ) : null
+          )}
+        </select>
+        <button className="icon" aria-label={`Tirar a ${who}`} onClick={() => p.onChange(removeBreak(prod, d.id, b.id))}>
+          ×
+        </button>
+      </div>
+    )
+  }
+  /** The breaks put right after a scene of a day (or after one of its shots that is no longer there). */
+  const breaksAfterScene = (d: ShootDay, s: SceneInfo): MealBreak[] => {
+    const own = s.id ? entryOf(s, prod, shots, d).shots.map((x) => x.id) : []
+    return (d.breaks ?? []).filter((b) => b.after?.scene === s.id && (!b.after?.shot || !own.includes(b.after.shot)))
+  }
+  /** The breaks that go by their time: no place, or a place whose scene left the day. */
+  const freeBreaks = (d: ShootDay): MealBreak[] => (d.breaks ?? []).filter((b) => !b.after || !d.scenes.includes(b.after.scene))
 
   const strip = (s: SceneInfo, where: { dayId: string | null; pos: number; count: number }): JSX.Element => {
     const day = where.dayId === null ? null : prod.days.find((x) => x.id === where.dayId) ?? null
@@ -327,7 +419,14 @@ function Plan(p: Props): JSX.Element {
         }}
         onDragEnd={() => setDragging(null)}
         onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => drop(e, where.dayId, where.dayId === null ? undefined : where.pos)}
+        onDrop={(e) => {
+          if (dragBreak) {
+            e.preventDefault()
+            e.stopPropagation()
+            return s.id ? placeTo(where.dayId, { scene: s.id }) : setDragBreak(null)
+          }
+          drop(e, where.dayId, where.dayId === null ? undefined : where.pos)
+        }}
       >
         <b className="strip-n">
           {s.number}
@@ -394,7 +493,17 @@ function Plan(p: Props): JSX.Element {
           // the scene's shots from the storyboard, in the order they are filmed; with more than one, each can go to another day
           <ul className="strip-shots" aria-label={`Planos da cena ${s.number}`}>
             {shotsByTime(entry.shots).map((sh) => (
-              <li key={sh.id} title={sh.text}>
+              <Fragment key={sh.id}>
+              <li
+                title={sh.text}
+                onDragOver={(e) => dragBreak && e.preventDefault()}
+                onDrop={(e) => {
+                  if (!dragBreak) return
+                  e.preventDefault()
+                  e.stopPropagation()
+                  if (s.id) placeTo(where.dayId, { scene: s.id, shot: sh.id })
+                }}
+              >
                 <span className="shot-code">{sh.code}</span> <span className="shot-text">{sh.text}</span>
                 {where.dayId !== null && s.id !== null && (
                   <input
@@ -426,6 +535,15 @@ function Plan(p: Props): JSX.Element {
                   </select>
                 )}
               </li>
+              {day &&
+                (day.breaks ?? [])
+                  .filter((b) => b.after?.scene === s.id && b.after?.shot === sh.id)
+                  .map((b) => (
+                    <li key={b.id} className="plan-break-shot">
+                      {breakChip(day, prod.days.indexOf(day), b)}
+                    </li>
+                  ))}
+              </Fragment>
             ))}
           </ul>
         )}
@@ -549,44 +667,23 @@ function Plan(p: Props): JSX.Element {
                 {list.length === 0 ? (
                   <p className="muted">Nenhuma cena neste dia.</p>
                 ) : (
-                  <ol className="strips">{list.map((s, i) => strip(s, { dayId: d.id, pos: i, count: list.length }))}</ol>
+                  <ol className="strips">
+                    {list.map((s, i) => (
+                      <Fragment key={s.index}>
+                        {strip(s, { dayId: d.id, pos: i, count: list.length })}
+                        {breaksAfterScene(d, s).map((b) => (
+                          <li key={b.id} className="plan-break-row">
+                            {breakChip(d, n, b)}
+                          </li>
+                        ))}
+                      </Fragment>
+                    ))}
+                  </ol>
                 )}
-                {d.breaks?.length ? (
-                <div className="plan-breaks" role="group" aria-label={`Pausas de ${dayLabel(d, n)}`}>
-                  {d.breaks.map((b, i) => {
-                    const who = `pausa ${i + 1} de ${dayLabel(d, n)}`
-                    return (
-                      <div key={b.id} className="plan-break">
-                        <select aria-label={`Tipo da ${who}`} value={b.kind} onChange={(ev) => p.onChange(updateBreak(prod, d.id, b.id, { kind: ev.target.value as BreakKind }))}>
-                          {(Object.keys(BREAK_KINDS) as BreakKind[]).map((k) => (
-                            <option key={k} value={k}>
-                              {BREAK_KINDS[k]}
-                            </option>
-                          ))}
-                        </select>
-                        <input type="time" aria-label={`Horário da ${who}`} value={b.time} onChange={(ev) => p.onChange(updateBreak(prod, d.id, b.id, { time: ev.target.value }))} />
-                        <label className="plan-break-min">
-                          <input
-                            type="number"
-                            min={5}
-                            max={600}
-                            step={5}
-                            aria-label={`Minutos da ${who}`}
-                            value={b.minutes}
-                            onChange={(ev) => {
-                              const v = Math.round(Number(ev.target.value))
-                              if (v >= 1 && v <= 600) p.onChange(updateBreak(prod, d.id, b.id, { minutes: v }))
-                            }}
-                          />
-                          min
-                        </label>
-                        <button className="icon" aria-label={`Tirar a ${who}`} onClick={() => p.onChange(removeBreak(prod, d.id, b.id))}>
-                          ×
-                        </button>
-                      </div>
-                    )
-                  })}
-                </div>
+                {freeBreaks(d).length ? (
+                  <div className="plan-breaks" role="group" aria-label={`Pausas de ${dayLabel(d, n)}`}>
+                    {freeBreaks(d).map((b) => breakChip(d, n, b))}
+                  </div>
                 ) : null}
                 <textarea
                   value={d.notes}

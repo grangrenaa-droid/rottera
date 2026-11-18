@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  addBreak,
   addDay,
+  placeBreak,
   cleanProduction,
   dayReport,
   emptyProduction,
@@ -19,6 +21,7 @@ import {
   unscheduled
 } from '../src/shared/production'
 import type { Block, Frame, Production, Script } from '../src/shared/types'
+import { buildReportHtml } from '../src/shared/reportHtml'
 
 const blocks: Block[] = [
   { kind: 'scene_heading', text: 'INT. COZINHA - DIA', nid: 's1' },
@@ -242,5 +245,49 @@ describe('sound on the day sheet', () => {
     expect(c.scenes.map((s) => s.sound)).toEqual(['Som direto', ''])
     expect(c.ambiences).toBe('COZINHA: geladeira')
     expect(located).toEqual([['COZINHA', 'RUA']])
+  })
+})
+
+describe('a break put in a place of the day', () => {
+  it('goes after a scene or after a shot, moves to another day, and back to its time', () => {
+    const { p: p0, a, b } = planned()
+    let p = scheduleScene(p0, 's2', a)
+    p = addBreak(p, a, 'lunch')
+    const id = p.days[0].breaks![0].id
+    p = placeBreak(p, a, id, a, { scene: 's1', shot: 'f1' })
+    expect(p.days[0].breaks![0].after).toEqual({ scene: 's1', shot: 'f1' })
+    p = placeBreak(p, a, id, a, { scene: 's1' })
+    expect(p.days[0].breaks![0].after).toEqual({ scene: 's1' })
+    p = placeBreak(p, a, id, a, null)
+    expect(p.days[0].breaks![0].after).toBeUndefined()
+    // dropped on another day: it moves there
+    const moved = placeBreak(p, a, id, b, null)
+    expect(moved.days[0].breaks).toBeUndefined()
+    expect(moved.days[1].breaks!.map((x) => x.id)).toEqual([id])
+  })
+
+  it('the day sheet prints it where it was put: between two shots, or after a scene', () => {
+    const { p: p0, a } = planned()
+    let p = scheduleScene(p0, 's2', a)
+    p = addBreak(p, a, 'lunch')
+    p = addBreak(p, a, 'snack')
+    const [lunch, snack] = p.days[0].breaks!.map((x) => x.id)
+    p = placeBreak(p, a, lunch, a, { scene: 's1', shot: 'f1' })
+    p = placeBreak(p, a, snack, a, { scene: 's2' })
+    const c = dayReport(p.days[0], 0, scenes, p, shots).printed!.callsheet!
+    const html = buildReportHtml({ title: 'x', columns: [], rows: [], scriptTitle: '', callsheet: c })
+    const at = (s: string): number => html.indexOf(s)
+    expect(at('Marina de costas')).toBeLessThan(at('Almoço'))
+    expect(at('Almoço')).toBeLessThan(at('O café caindo'))
+    expect(at('Cena 2')).toBeLessThan(at('Lanche'))
+    expect(at('Rua molhada')).toBeLessThan(at('Lanche'))
+  })
+
+  it('a place is kept in the file only while its scene is on that day', () => {
+    const p = cleanProduction({
+      items: [],
+      days: [{ id: 'd1', label: '', notes: '', scenes: ['s1'], breaks: [{ id: 'b1', kind: 'lunch', time: '', minutes: 60, after: { scene: 's1', shot: 'f2' } }, { id: 'b2', kind: 'snack', time: '', minutes: 30, after: { scene: 's9' } }] }]
+    })
+    expect(p.days[0].breaks!.map((x) => x.after)).toEqual([{ scene: 's1', shot: 'f2' }, undefined])
   })
 })

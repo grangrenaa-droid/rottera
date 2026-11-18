@@ -347,6 +347,8 @@ export interface MealBreak {
   /** "12:30", or '' when it has no time yet. */
   time: string
   minutes: number
+  /** Where it was put in the day: after a scene, or after one of its shots (a frame id). Missing = by its time. */
+  after?: { scene: string; shot?: string }
 }
 
 export interface ShootDay {

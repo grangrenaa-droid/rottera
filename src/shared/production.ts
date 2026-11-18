@@ -192,7 +192,8 @@ export function cleanProduction(raw: unknown): Production {
             id: b.id as string,
             kind: (b.kind as string) in BREAK_KINDS ? (b.kind as BreakKind) : 'snack',
             time: isTime(b.time) ? b.time : '',
-            minutes: typeof b.minutes === 'number' && b.minutes >= 1 && b.minutes <= 600 ? Math.round(b.minutes) : 30
+            minutes: typeof b.minutes === 'number' && b.minutes >= 1 && b.minutes <= 600 ? Math.round(b.minutes) : 30,
+            ...placeOf(b.after, scenes)
           }))
         if (breaks.length) day.breaks = breaks
       }
@@ -277,6 +278,28 @@ export const addBreak = (p: Production, dayId: string, kind: BreakKind = 'lunch'
 export const updateBreak = (p: Production, dayId: string, id: string, patch: Partial<Pick<MealBreak, 'kind' | 'time' | 'minutes'>>): Production =>
   withBreaks(p, dayId, (l) => l.map((b) => (b.id === id ? { ...b, ...patch } : b)))
 export const removeBreak = (p: Production, dayId: string, id: string): Production => withBreaks(p, dayId, (l) => l.filter((b) => b.id !== id))
+
+/** The place of a break as the file brings it, kept only while its scene is on the day. */
+function placeOf(v: unknown, scenes: string[]): { after?: MealBreak['after'] } {
+  if (!v || typeof v !== 'object') return {}
+  const a = v as Record<string, unknown>
+  if (typeof a.scene !== 'string' || !scenes.includes(a.scene)) return {}
+  return { after: typeof a.shot === 'string' && a.shot && a.shot.length <= 64 ? { scene: a.scene, shot: a.shot } : { scene: a.scene } }
+}
+
+/**
+ * Puts a break in a place of a day: after a scene, after one of its shots, or (null) back to its time. Dropped on
+ * another day, it moves there.
+ */
+export function placeBreak(p: Production, fromDay: string, id: string, toDay: string, after: MealBreak['after'] | null): Production {
+  const b = p.days.find((d) => d.id === fromDay)?.breaks?.find((x) => x.id === id)
+  if (!b) return p
+  const moved: MealBreak = { ...b }
+  if (after) moved.after = after.shot ? { scene: after.scene, shot: after.shot } : { scene: after.scene }
+  else delete moved.after
+  if (fromDay === toDay) return withBreaks(p, fromDay, (l) => l.map((x) => (x.id === id ? moved : x)))
+  return withBreaks(withBreaks(p, fromDay, (l) => l.filter((x) => x.id !== id)), toDay, (l) => [...l, moved])
+}
 
 export function updateDay(p: Production, dayId: string, patch: Partial<Pick<ShootDay, 'label' | 'notes' | 'date' | 'place'>>): Production {
   return {
@@ -810,7 +833,15 @@ function callSheetOf(day: ShootDay, n: number, total: number, list: PlanEntry[],
     summary: daySummary(list),
     notes: day.notes.trim(),
     ...(day.date ? { date: longDate(day.date) } : {}),
-    ...(day.breaks?.length ? { breaks: day.breaks.map((b) => ({ time: b.time, label: BREAK_KINDS[b.kind], length: breakLength(b.minutes) })) } : {}),
+    ...(day.breaks?.length
+      ? {
+          breaks: day.breaks.map((b) => {
+            const at = b.after ? list.findIndex((e) => e.scene.id === b.after?.scene) : -1
+            const shot = at >= 0 && b.after?.shot ? list[at].shots.find((x) => x.id === b.after?.shot)?.code : undefined
+            return { time: b.time, label: BREAK_KINDS[b.kind], length: breakLength(b.minutes), ...(at >= 0 ? { after: at } : {}), ...(shot ? { shot } : {}) }
+          })
+        }
+      : {}),
     ...(sun ? { sun } : {}),
     ...(sound ? { ambiences: sound.ambiences([...new Set(list.map((e) => locationKey(e.scene)))]) } : {}),
     scenes: list.map((e) => ({

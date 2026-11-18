@@ -58,7 +58,7 @@ export interface CallSheet {
   /** The day's sun on one line (Luz window), when the day has a date and a place. */
   sun?: string
   /** Meal breaks, printed between the scenes by their time ('' = at the end). */
-  breaks?: { time: string; label: string; length: string }[]
+  breaks?: { time: string; label: string; length: string; after?: number; shot?: string }[]
   scenes: CallSheetScene[]
 }
 
@@ -140,7 +140,13 @@ function cleanCallSheet(c: CallSheet): CallSheet {
     ambiences: str(x.ambiences, MAX_CELL),
     date: str(x.date, 60),
     sun: str(x.sun, 400),
-    breaks: list(x.breaks, 20, (b) => ({ time: str(b.time, 20), label: str(b.label, 60), length: str(b.length, 30) })),
+    breaks: list(x.breaks, 20, (b) => ({
+      time: str(b.time, 20),
+      label: str(b.label, 60),
+      length: str(b.length, 30),
+      ...(typeof b.after === 'number' && Number.isInteger(b.after) && b.after >= 0 ? { after: b.after } : {}),
+      ...(typeof b.shot === 'string' && b.shot ? { shot: str(b.shot, 40) } : {})
+    })),
     scenes: list(x.scenes, 2000, (s) => ({
       time: str(s.time, 20),
       number: str(s.number, 40),
@@ -169,11 +175,20 @@ function callSheetHtml(c: CallSheet, scriptTitle: string): string {
     (c.ambiences?.trim() ? `<p class="cs-locs"><b>Gravar ambientes:</b> ${esc(c.ambiences)}</p>` : '') +
     (c.notes.trim() ? `<div class="cs-notes">${esc(c.notes)}</div>` : '') +
     `</header>`
-  const scene = (s: CallSheetScene): string => {
+  type Brk = NonNullable<CallSheet['breaks']>[number]
+  const brks = c.breaks ?? []
+  // a break put between two shots of a scene: a line of the shot list
+  const pause = (b: Brk): string =>
+    `<li class="cs-shot cs-pause"><span class="cs-t">${esc(b.time)}</span><span class="cs-code">—</span><span>${esc(b.label)} · ${esc(b.length)}</span></li>`
+  const scene = (s: CallSheetScene, i: number): string => {
     const line = [`Cena ${s.number}${s.part ? ' (parte)' : ''}`, s.intExt, s.location, s.dn === 'N' ? 'Noite' : 'Dia', s.pages ? `${s.pages} pág.` : ''].filter(Boolean)
     const shots = s.shots.length
       ? `<ol class="cs-shots">${s.shots
-          .map((h) => `<li class="cs-shot"><span class="cs-t">${esc(h.time)}</span><span class="cs-code">${esc(h.code)}</span><span>${esc(h.text)}</span></li>`)
+          .map(
+            (h) =>
+              `<li class="cs-shot"><span class="cs-t">${esc(h.time)}</span><span class="cs-code">${esc(h.code)}</span><span>${esc(h.text)}</span></li>` +
+              brks.filter((b) => b.after === i && b.shot === h.code).map(pause).join('')
+          )
           .join('')}</ol>`
       : ''
     return (
@@ -186,16 +201,22 @@ function callSheetHtml(c: CallSheet, scriptTitle: string): string {
       `</section>`
     )
   }
-  const brk = (b: { time: string; label: string; length: string }): string =>
+  const brk = (b: Brk): string =>
     `<section class="cs-break"><div class="cs-line"><span class="cs-time">${esc(b.time || '—')}</span><span class="cs-what">${esc(b.label)} · ${esc(b.length)}</span></div></section>`
-  // each break goes before the first scene shot after it; breaks with no time, at the end
-  const timed = (c.breaks ?? []).filter((b) => b.time).sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0))
-  const untimed = (c.breaks ?? []).filter((b) => !b.time)
+  // a break put in a place goes there (after its scene, or between its shots); the others go before the first scene
+  // shot after their time, and those with no time at the end
+  const placed = (b: Brk): boolean => b.after !== undefined && b.after < c.scenes.length
+  const shotPlaced = (b: Brk): boolean => placed(b) && !!b.shot && c.scenes[b.after as number].shots.some((h) => h.code === b.shot)
+  const free = brks.filter((b) => !placed(b))
+  const timed = free.filter((b) => b.time).sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0))
+  const untimed = free.filter((b) => !b.time)
   const out: string[] = []
-  for (const s of c.scenes) {
+  c.scenes.forEach((s, i) => {
     while (s.time && timed.length && timed[0].time <= s.time) out.push(brk(timed.shift()!))
-    out.push(scene(s))
-  }
+    out.push(scene(s, i))
+    // after the scene: those put after it, and those put after a shot it no longer has
+    for (const b of brks) if (b.after === i && (!b.shot || !shotPlaced(b))) out.push(brk(b))
+  })
   for (const b of [...timed, ...untimed]) out.push(brk(b))
   return head + (c.scenes.length ? out.join('\n') : '<p class="empty">Nenhuma cena neste dia.</p>' + [...timed, ...untimed].map(brk).join(''))
 }
@@ -294,6 +315,7 @@ tr.gn td { font-style: italic; color: #333; border-bottom: 0.5pt dashed #999 }
 .cs-scene { break-inside: avoid; border-bottom: 0.5pt solid #999; padding: 6pt 0 7pt }
 .cs-break { break-inside: avoid; border-bottom: 0.5pt dashed #999; padding: 4pt 0; background: #f2f2f2 }
 .cs-break .cs-line { font-weight: 600; font-style: italic }
+.cs-pause { font-weight: 600; font-style: italic; background: #f2f2f2 }
 .cs-line { display: flex; gap: 10pt; align-items: baseline; font-size: 10.5pt; font-weight: 700 }
 .cs-time { min-width: 34pt; font-variant-numeric: tabular-nums }
 .cs-syn, .cs-row, .cs-shots { margin: 3pt 0 0 44pt }

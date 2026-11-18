@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ElectronApplication, Page } from '@playwright/test'
-import { axeViolations, expect, menu, setTheme, test, type Dialogs } from './fixtures'
+import { axeViolations, bridgeInfo, expect, menu, setTheme, test, type Dialogs } from './fixtures'
 
 test.afterEach(({ errors }) => {
   expect(errors, 'console or page errors').toEqual([])
@@ -71,7 +71,57 @@ async function clickWord(page: Page, kind: string, word: string): Promise<void> 
   await page.mouse.click(box.x, box.y)
 }
 
+async function rpc(userData: string, method: string, params: unknown = {}): Promise<{ ok: boolean; result?: any; error?: string }> {
+  const { port, token } = bridgeInfo(userData)
+  const r = await fetch(`http://127.0.0.1:${port}/rpc`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ method, params })
+  })
+  return (await r.json()) as { ok: boolean; result?: any; error?: string }
+}
+
 test.describe('F29 updates of 17/11', () => {
+  test('F29-H9 the cast tab has no scroll bar of its own', async ({ app, page, dialogs }) => {
+    await open(page, dialogs)
+    await menu(app, 'view-shooting')
+    await page.getByRole('group', { name: 'Filmagem' }).getByRole('button', { name: 'Elenco' }).click()
+    for (let i = 0; i < 3; i++) await page.getByRole('button', { name: '+ Pessoa' }).click()
+    const list = page.getByRole('navigation', { name: 'Pessoas do filme' })
+    const { scroll, client } = await list.evaluate((el) => ({ scroll: el.scrollHeight, client: el.clientHeight }))
+    expect(scroll, 'the list does not scroll by itself').toBeLessThanOrEqual(client + 1)
+    const add = await page.getByRole('button', { name: '+ Pessoa' }).boundingBox()
+    expect(add?.height ?? 99, '+ Pessoa on one line').toBeLessThan(44)
+  })
+
+  test('F29-H10 a break is dragged between two shots, or put after a scene, and the day sheet follows', async ({ app, page, dialogs, userData }) => {
+    await open(page, dialogs)
+    for (const caption of ['Marina de costas', 'O café caindo']) expect((await rpc(userData, 'add_frame', { caption, scene: '1' })).ok).toBe(true)
+    await menu(app, 'view-shooting')
+    await page.getByRole('button', { name: 'Plano de filmagem' }).click()
+    await page.getByRole('button', { name: 'Novo dia' }).click()
+    for (const n of ['1', '2']) await page.getByLabel(`Dia da cena ${n}`, { exact: true }).selectOption({ label: 'Dia 1' })
+    await page.getByRole('button', { name: '+ Pausa' }).click()
+
+    // dragged onto the first shot: it goes right after it, between 1.1 and 1.2
+    const shots1 = page.getByRole('list', { name: 'Planos da cena 1' })
+    await page.locator('.plan-break').first().dragTo(shots1.locator('li').first())
+    await expect(shots1.locator('.plan-break')).toHaveCount(1)
+    await expect(page.getByLabel('Lugar da pausa 1 de Dia 1')).toHaveValue(/^p:/)
+    const sent = await catchReports(app)
+    await page.getByRole('button', { name: 'Ordem do dia (PDF)' }).click()
+    await expect.poll(sent).not.toBeNull()
+    expect((await sent()).callsheet.breaks[0]).toMatchObject({ label: 'Almoço', after: 0, shot: '1.1' })
+
+    // or chosen in the box: after scene 2
+    await page.getByLabel('Lugar da pausa 1 de Dia 1').selectOption({ label: 'Depois da cena 2' })
+    await expect(shots1.locator('.plan-break')).toHaveCount(0)
+    await expect(page.locator('.strips > .plan-break-row')).toHaveCount(1)
+    // and back to its time
+    await page.getByLabel('Lugar da pausa 1 de Dia 1').selectOption({ label: 'Pelo horário' })
+    await expect(page.locator('.plan-breaks .plan-break')).toHaveCount(1)
+  })
+
   test('F29-A1 the new screens have no serious accessibility violations, light and dark', async ({ app, page, dialogs }) => {
     await open(page, dialogs)
     const found: string[] = []

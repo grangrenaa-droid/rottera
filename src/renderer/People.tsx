@@ -47,7 +47,8 @@ export function PeopleView(p: Props): JSX.Element {
 
   return (
     <div className="snd-sheets people-view">
-      <nav aria-label="Pessoas do filme" className="prod-scenes">
+      <div className="people-side">
+      <nav aria-label="Pessoas do filme" className="prod-scenes people-list">
         {(Object.keys(GROUPS) as Person['group'][]).map((g) => {
           const list = p.people.filter((x) => x.group === g)
           if (!list.length) return null
@@ -72,10 +73,11 @@ export function PeopleView(p: Props): JSX.Element {
           )
         })}
         {p.people.length === 0 && <p className="muted">Ninguém na lista ainda.</p>}
-        <button className="btn secondary" onClick={add}>
-          + Pessoa
-        </button>
       </nav>
+      <button className="btn secondary" onClick={add}>
+        + Pessoa
+      </button>
+      </div>
 
       {current ? (
         <section className="snd-sheet people-form" aria-label={`Ficha de ${label}`}>
