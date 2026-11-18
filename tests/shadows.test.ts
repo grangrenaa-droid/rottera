@@ -212,3 +212,64 @@ describe('modifiers change the light (Etapa 3)', () => {
     for (const tag of ['data-soft', 'data-cookie', 'data-bounce', 'data-overhead']) expect(plain).not.toContain(tag)
   })
 })
+
+describe('the actor in the light (Etapa 3, ajustes)', () => {
+  const lamp = { ...newItem('fresnel', 4, 5), id: 'luz', rotation: 0, range: 4 }
+  const ana = { ...newItem('actor', 4, 3), id: 'ana' }
+  const svgOf = (items: LightMap['items']): string => lightMapSvg({ ...newLightMap('Sala'), id: 'sala', width: 8, height: 6, shadows: true, items })
+  const polygonOf = (svg: string, attr: string): { x: number; y: number }[] => {
+    const m = new RegExp(`${attr} points="([^"]+)"`).exec(svg)
+    if (!m) throw new Error(`no ${attr}`)
+    return m[1].split(' ').map((p) => {
+      const [x, y] = p.split(',').map(Number)
+      return { x: x / 60, y: y / 60 }
+    })
+  }
+
+  it('an actor stands in the way of the light: the body is a blocker across where the light comes from', () => {
+    const map = { ...newLightMap('x'), items: [ana] }
+    const segs = blockers(map, 'sharp', undefined, () => ({ x: 0, y: -1 }))
+    expect(segs).toHaveLength(1)
+    expect(Math.abs(segs[0].y1 - 3) + Math.abs(segs[0].y2 - 3)).toBeLessThan(1e-9)
+    expect(Math.abs(segs[0].x2 - segs[0].x1)).toBeGreaterThan(0.4)
+    // without knowing where the light comes from, nobody stands in the way
+    expect(blockers(map, 'sharp')).toHaveLength(0)
+  })
+
+  it('an actor in a beam casts a shadow behind', () => {
+    const area = polygonOf(svgOf([ana, lamp]), 'data-lit="luz"')
+    expect(insidePolygon({ x: 4, y: 3.5 }, area)).toBe(true)
+    expect(insidePolygon({ x: 4, y: 2 }, area)).toBe(false)
+    expect(insidePolygon({ x: 3.5, y: 2 }, area)).toBe(true)
+  })
+
+  it('an actor in the sun casts a shadow', () => {
+    const sun = { ...newItem('sun', 4, 0.4), id: 'sol' }
+    const shade = /data-shade="sol"[^>]*>(.*?)<\/g>/.exec(svgOf([sun, ana]))![1]
+    expect(shade).toContain('<polygon')
+  })
+
+  it('an actor shows the side the light comes from, or that no light reaches', () => {
+    const lit = svgOf([ana, lamp])
+    expect(lit).toContain('data-actor-lit="ana"')
+    expect(lit).not.toContain('data-actor-dark')
+    const dark = svgOf([{ ...ana, x: 7, y: 1 }, lamp])
+    expect(dark).toContain('data-actor-dark="ana"')
+  })
+
+  it('a diffuser in the beam spreads a soft, wider light forward', () => {
+    const svg = svgOf([{ ...newItem('diffuser', 4, 3), id: 'dif', length: 1.2 }, lamp])
+    expect(svg).toContain('data-diffused="dif"')
+    expect(svgOf([{ ...newItem('diffuser', 7.5, 0.5), id: 'dif' }, lamp])).not.toContain('data-diffused')
+  })
+
+  it('a bounce sends back light that can be seen, and lights an actor in front of it', () => {
+    const bounce = { ...newItem('bounce', 4, 2.5), id: 'b', rotation: 0 }
+    const svg = svgOf([bounce, lamp])
+    const op = Number(/data-bounce-soft="b"[^>]*fill-opacity="([\d.]+)"/.exec(svg)![1])
+    expect(op).toBeGreaterThanOrEqual(0.2)
+    // an actor behind the lamp, out of its beam, gets only the bounce's light
+    const back = svgOf([bounce, { ...lamp, rotation: 0 }, { ...ana, x: 5.2, y: 4.2 }])
+    expect(back).toContain('data-actor-lit="ana"')
+  })
+})

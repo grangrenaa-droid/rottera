@@ -64,6 +64,9 @@ export function wallSegments(map: LightMap, opts: { windows?: 'open' | 'closed' 
  */
 export type Pass = 'sharp' | 'soft' | 'cookie'
 
+/** How wide an actor's body is, in metres (the actor's mark on the map). */
+const BODY = 0.47
+
 /** The modifiers that stand in the light's way, how long they are by default, and which light they let through. */
 const MODIFIERS: Partial<Record<LightItemType, { length: number; lets?: Pass }>> = {
   flag: { length: 0.9 },
@@ -75,14 +78,25 @@ const MODIFIERS: Partial<Record<LightItemType, { length: number; lets?: Pass }>>
 
 /**
  * What stops one kind of light: the walls (windows let the softened light through) and every modifier standing in
- * the set, except the one that kind of light goes through. `skip` leaves one piece out (a reflector sending light back
- * does not stop its own light).
+ * the set, except the one that kind of light goes through. `skip` leaves pieces out (a reflector sending light back
+ * does not stop its own light). With `towards`, the actors stand in the way too: each body across the way the light
+ * comes to it (`towards` says which way that is, for each actor).
  */
-export function blockers(map: LightMap, pass: Pass, skip?: string): Segment[] {
+export function blockers(map: LightMap, pass: Pass, skip?: string | string[], towards?: (actor: { x: number; y: number }) => Pt): Segment[] {
   const out = wallSegments(map, { windows: pass === 'soft' ? 'open' : 'closed' })
+  const left = new Set(typeof skip === 'string' ? [skip] : skip ?? [])
   for (const it of map.items) {
+    if (left.has(it.id)) continue
+    if (it.type === 'actor' && towards) {
+      const v = towards(it)
+      const n = Math.hypot(v.x, v.y)
+      if (n < 1e-9) continue
+      const half = BODY / 2
+      out.push({ x1: it.x - (v.y / n) * half, y1: it.y + (v.x / n) * half, x2: it.x + (v.y / n) * half, y2: it.y - (v.x / n) * half })
+      continue
+    }
     const m = MODIFIERS[it.type]
-    if (!m || it.id === skip || m.lets === pass) continue
+    if (!m || m.lets === pass) continue
     const len = it.length ?? m.length
     const a = (it.rotation * Math.PI) / 180
     const dx = (Math.cos(a) * len) / 2
@@ -116,12 +130,17 @@ export function reflectDirection(v: Pt, rotation: number): Pt {
  */
 export function reflectedBeam(mod: { x: number; y: number; rotation: number; type: LightItemType }, incoming: Pt, range: number): Beam {
   if (mod.type !== 'bounce') {
-    return { x: mod.x, y: mod.y, rotation: rotationOf(reflectDirection(incoming, mod.rotation)), spread: 30, range }
+    return { x: mod.x, y: mod.y, rotation: rotationOf(reflectDirection(incoming, mod.rotation)), spread: 30, range: Math.max(1.5, range) }
   }
   const a = (mod.rotation * Math.PI) / 180
   let n = { x: -Math.sin(a), y: Math.cos(a) }
   if (n.x * incoming.x + n.y * incoming.y > 0) n = { x: -n.x, y: -n.y }
-  return { x: mod.x, y: mod.y, rotation: rotationOf(n), spread: 120, range: range * 0.6 }
+  return { x: mod.x, y: mod.y, rotation: rotationOf(n), spread: 120, range: Math.max(2.5, range * 0.8) }
+}
+
+/** The light a diffuser spreads on when light going along `incoming` goes through it: wide and soft, the same way on. */
+export function diffusedBeam(mod: { x: number; y: number }, incoming: Pt, range: number): Beam {
+  return { x: mod.x, y: mod.y, rotation: rotationOf(incoming), spread: 90, range: Math.max(1.5, range) }
 }
 
 /** How far along a ray (from o, direction v of length 1) it meets a segment; Infinity when it does not. */
