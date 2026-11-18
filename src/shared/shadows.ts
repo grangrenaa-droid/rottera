@@ -189,20 +189,23 @@ function across(mod: Flat, dir: Pt): number {
   return len * Math.abs(Math.cos(a) * dir.y - Math.sin(a) * dir.x)
 }
 
+/** A beam's reach (along its edges) for it to get `middle` metres down its middle: its far end is straight across. */
+const edgeFor = (middle: number, spread: number): number => middle / Math.cos((spread / 2) * (Math.PI / 180))
+
 export function reflectedBeam(mod: Flat, incoming: Pt, range: number): Beam {
   if (mod.type !== 'bounce') {
     const r = reflectDirection(incoming, mod.rotation)
-    return { x: mod.x, y: mod.y, rotation: rotationOf(r), spread: 30, range: Math.max(1.5, range), width: across(mod, r) }
+    return { x: mod.x, y: mod.y, rotation: rotationOf(r), spread: 30, range: edgeFor(Math.max(1.5, range), 30), width: across(mod, r) }
   }
   const a = (mod.rotation * Math.PI) / 180
   let n = { x: -Math.sin(a), y: Math.cos(a) }
   if (n.x * incoming.x + n.y * incoming.y > 0) n = { x: -n.x, y: -n.y }
-  return { x: mod.x, y: mod.y, rotation: rotationOf(n), spread: 120, range: Math.max(2.5, range * 0.8), width: across(mod, n) }
+  return { x: mod.x, y: mod.y, rotation: rotationOf(n), spread: 120, range: edgeFor(Math.max(2.5, range * 0.8), 120), width: across(mod, n) }
 }
 
 /** The light a diffuser spreads on when light going along `incoming` goes through it: wide and soft, the same way on. */
 export function diffusedBeam(mod: Flat, incoming: Pt, range: number): Beam {
-  return { x: mod.x, y: mod.y, rotation: rotationOf(incoming), spread: 90, range: Math.max(1.5, range), width: across(mod, incoming) }
+  return { x: mod.x, y: mod.y, rotation: rotationOf(incoming), spread: 90, range: edgeFor(Math.max(1.5, range), 90), width: across(mod, incoming) }
 }
 
 /** How far along a ray (from o, direction v of length 1) it meets a segment; Infinity when it does not. */
@@ -261,8 +264,9 @@ export function litArea(b: Beam, all: Segment[]): Pt[] {
   const { apex: o, dir, back, half, round } = source(b)
   // how far along a ray (`d` off the axis) the face is: nothing before it stops the light
   const face = (d: number): number => (back > 0 ? back / Math.cos(d) : 0)
+  const end = (d: number): number => reachAlong(b, back, half, round, d)
   // only what is within reach can stop a ray
-  const walls = all.filter((s) => distanceTo(o, s) <= face(half) + b.range)
+  const walls = all.filter((s) => distanceTo(o, s) <= end(half))
   const a0 = Math.atan2(dir.y, dir.x)
   const steps = Math.max(4, Math.ceil(round ? 360 : b.spread))
   const angles: number[] = []
@@ -282,7 +286,7 @@ export function litArea(b: Beam, all: Segment[]): Pt[] {
   const pts = angles.map((d) => {
     const v = { x: Math.cos(a0 + d), y: Math.sin(a0 + d) }
     const start = face(d)
-    let t = start + b.range
+    let t = end(d)
     for (const s of walls) {
       const h = hit(o, v, s)
       if (h > start + 1e-9 && h < t) t = h
@@ -292,6 +296,16 @@ export function litArea(b: Beam, all: Segment[]): Pt[] {
   if (round) return pts
   // a face with a width: the area starts along it (a trapezoid); from a point it starts at the point (a triangle)
   return back > 0 ? [at(angles[0], face(angles[0])), ...pts, at(angles[angles.length - 1], face(angles[angles.length - 1]))] : [o, ...pts]
+}
+
+/**
+ * How far along a ray (`d` off the axis, from where the rays come from) a beam reaches. The far end is a straight
+ * line across the beam, where the cone's edges end (the same as the cone drawn without light and shadow); a light
+ * shining all round reaches as far every way.
+ */
+function reachAlong(b: Beam, back: number, half: number, round: boolean, d: number): number {
+  if (round) return b.range
+  return (back + b.range * Math.cos(half)) / Math.cos(d)
 }
 
 /** How far a point is from a segment. */
@@ -329,7 +343,8 @@ export function reaches(b: Beam, p: Pt, walls: Segment[]): boolean {
     start = back > 0 ? back / Math.cos(off) : 0
     if (dist < start - 1e-9) return false
   }
-  if (dist > start + b.range) return false
+  const off = round || dist <= 1e-9 ? 0 : Math.abs(wrap(Math.atan2(p.y - o.y, p.x - o.x) - Math.atan2(dir.y, dir.x)))
+  if (dist > reachAlong(b, back, half, round, off) + 1e-9) return false
   return clear(o, p, walls, start)
 }
 

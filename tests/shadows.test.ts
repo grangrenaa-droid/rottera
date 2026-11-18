@@ -17,12 +17,12 @@ describe('the walls of a map, as segments', () => {
 })
 
 describe('the area a light reaches', () => {
-  // a light at (3, 4) pointing up (rotation 0), 60° wide, 3 m long
+  // a light at (3, 4) pointing up (rotation 0), 60° wide, its edges 3 m long (the far end straight across)
   const light = { x: 3, y: 4, rotation: 0, spread: 60, range: 3 }
 
   it('without walls, it is the whole beam', () => {
     const area = litArea(light, [])
-    expect(Math.min(...area.map((p) => p.y))).toBeCloseTo(1, 1)
+    expect(Math.min(...area.map((p) => p.y))).toBeCloseTo(4 - 3 * Math.cos(Math.PI / 6), 1)
   })
 
   it('stops at a wall in its way, and goes on beside a wall out of its way', () => {
@@ -30,7 +30,7 @@ describe('the area a light reaches', () => {
     const area = litArea(light, across)
     expect(Math.min(...area.map((p) => p.y))).toBeGreaterThanOrEqual(2 - 1e-6)
     const aside = wallSegments({ ...newLightMap('x'), items: [wall(8, 2, 1)] })
-    expect(Math.min(...litArea(light, aside).map((p) => p.y))).toBeCloseTo(1, 1)
+    expect(Math.min(...litArea(light, aside).map((p) => p.y))).toBeCloseTo(4 - 3 * Math.cos(Math.PI / 6), 1)
   })
 
   it('a short wall casts a shadow: behind it is dark, beside it is lit', () => {
@@ -403,5 +403,30 @@ describe('a light comes out of its whole face: a trapezoid, not a triangle', () 
     expect(reflectedBeam({ x: 4, y: 3, rotation: 45, type: 'reflector', length: 0.9 }, { x: 0, y: -1 }, 3).width).toBeCloseTo(0.9 * Math.SQRT1_2)
     expect(reflectedBeam({ x: 4, y: 3, rotation: 0, type: 'bounce', length: 1.2 }, { x: 0, y: -1 }, 3).width).toBeCloseTo(1.2)
     expect(diffusedBeam({ x: 4, y: 3, rotation: 0, type: 'diffuser', length: 1 }, { x: 0, y: -1 }, 3).width).toBeCloseTo(1)
+  })
+})
+
+describe('the far end of a beam is straight, the same with light and shadow on or off', () => {
+  it('the lit area ends on a straight line across the beam, where the cone drawn without shadows ends', () => {
+    const b = { x: 4, y: 5, rotation: 0, spread: 40, range: 3 }
+    const far = litArea(b, []).slice(1)
+    const end = 5 - 3 * Math.cos((20 * Math.PI) / 180)
+    for (const p of far) expect(p.y).toBeCloseTo(end)
+    expect(reaches(b, { x: 4, y: end + 0.05 }, [])).toBe(true)
+    expect(reaches(b, { x: 4, y: end - 0.05 }, [])).toBe(false)
+  })
+
+  it('a light shining all round still reaches as far every way', () => {
+    const round = litArea({ x: 4, y: 3, rotation: 0, spread: 360, range: 2 }, [])
+    for (const p of round) expect(Math.hypot(p.x - 4, p.y - 3)).toBeCloseTo(2)
+  })
+})
+
+describe('light passed on reaches as far down the middle however wide it opens', () => {
+  it('a bounce reaches 2.5 m straight off its face, a reflector and a diffuser as far as the light had left', () => {
+    const middle = (b: ReturnType<typeof reflectedBeam>): number => b.range * Math.cos((b.spread / 2) * (Math.PI / 180))
+    expect(middle(reflectedBeam({ x: 4, y: 3, rotation: 0, type: 'bounce', length: 1.2 }, { x: 0, y: -1 }, 1))).toBeCloseTo(2.5)
+    expect(middle(reflectedBeam({ x: 4, y: 3, rotation: 45, type: 'reflector' }, { x: 0, y: -1 }, 3))).toBeCloseTo(3)
+    expect(middle(diffusedBeam({ x: 4, y: 3, rotation: 0, type: 'diffuser' }, { x: 0, y: -1 }, 3))).toBeCloseTo(3)
   })
 })
