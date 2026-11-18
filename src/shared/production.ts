@@ -275,8 +275,16 @@ const withBreaks = (p: Production, dayId: string, f: (list: MealBreak[]) => Meal
 })
 export const addBreak = (p: Production, dayId: string, kind: BreakKind = 'lunch'): Production =>
   withBreaks(p, dayId, (l) => [...l, { id: newId('brk'), kind, time: '', minutes: BREAK_MINUTES[kind] }])
+/** Changes a break; a new time takes back a place it was put in, so that it goes where its time says. */
 export const updateBreak = (p: Production, dayId: string, id: string, patch: Partial<Pick<MealBreak, 'kind' | 'time' | 'minutes'>>): Production =>
-  withBreaks(p, dayId, (l) => l.map((b) => (b.id === id ? { ...b, ...patch } : b)))
+  withBreaks(p, dayId, (l) =>
+    l.map((b) => {
+      if (b.id !== id) return b
+      const next: MealBreak = { ...b, ...patch }
+      if ('time' in patch && patch.time !== b.time) delete next.after
+      return next
+    })
+  )
 export const removeBreak = (p: Production, dayId: string, id: string): Production => withBreaks(p, dayId, (l) => l.filter((b) => b.id !== id))
 
 /** The place of a break as the file brings it, kept only while its scene is on the day. */
@@ -781,8 +789,49 @@ function daySummary(list: PlanEntry[]): string {
   return `${list.length} ${list.length === 1 ? 'cena' : 'cenas'} · ${e ? formatEighths(e) : '0'} pág.`
 }
 
-const dayEntries = (d: ShootDay, scenes: SceneInfo[], p: Production, shots: Map<string, ShotInfo[]>): PlanEntry[] =>
+export const dayEntries = (d: ShootDay, scenes: SceneInfo[], p: Production, shots: Map<string, ShotInfo[]>): PlanEntry[] =>
   dayScenes(d, scenes).map((s) => entryOf(s, p, shots, d))
+
+/**
+ * Where a break goes in a day: before everything, after a scene, at the top of a scene's shots (after it starts,
+ * before its first shot), after a shot, or nowhere yet (no time and no place: printed last).
+ */
+export type BreakSpot =
+  | { at: 'start' }
+  | { at: 'scene'; scene: string }
+  | { at: 'top'; scene: string }
+  | { at: 'shot'; scene: string; shot: string }
+  | { at: 'free' }
+
+/**
+ * The place it was put in (dragged, or chosen in its box) when it has one; otherwise its time decides, among the times
+ * of the scenes and of their shots: it goes before the first one later than it.
+ */
+export function breakSpot(b: MealBreak, entries: PlanEntry[]): BreakSpot {
+  if (b.after) {
+    const e = entries.find((x) => x.scene.id === b.after?.scene)
+    if (e && e.scene.id) {
+      if (b.after.shot && e.shots.some((x) => x.id === b.after?.shot)) return { at: 'shot', scene: e.scene.id, shot: b.after.shot }
+      return { at: 'scene', scene: e.scene.id }
+    }
+  }
+  if (!b.time) return { at: 'free' }
+  let prev: BreakSpot = { at: 'start' }
+  for (const e of entries) {
+    const sid = e.scene.id
+    if (!sid) continue
+    const list = shotsByTime(e.shots)
+    const start = e.time || list.find((x) => x.time)?.time || ''
+    if (start && b.time < start) return prev
+    prev = { at: 'top', scene: sid }
+    for (const sh of list) {
+      if (sh.time && b.time < sh.time) return prev
+      prev = { at: 'shot', scene: sid, shot: sh.id }
+    }
+    prev = { at: 'scene', scene: sid }
+  }
+  return prev
+}
 
 /** One day as a group of the printed plan: its name, its count, its notes, and its scenes at their times. */
 function daySection(d: ShootDay, n: number, scenes: SceneInfo[], p: Production, shots: Map<string, ShotInfo[]>, title = dayLabel(d, n)): ReportSection {
@@ -836,9 +885,14 @@ function callSheetOf(day: ShootDay, n: number, total: number, list: PlanEntry[],
     ...(day.breaks?.length
       ? {
           breaks: day.breaks.map((b) => {
-            const at = b.after ? list.findIndex((e) => e.scene.id === b.after?.scene) : -1
-            const shot = at >= 0 && b.after?.shot ? list[at].shots.find((x) => x.id === b.after?.shot)?.code : undefined
-            return { time: b.time, label: BREAK_KINDS[b.kind], length: breakLength(b.minutes), ...(at >= 0 ? { after: at } : {}), ...(shot ? { shot } : {}) }
+            const base = { time: b.time, label: BREAK_KINDS[b.kind], length: breakLength(b.minutes) }
+            const spot = breakSpot(b, list)
+            if (spot.at === 'free') return base
+            if (spot.at === 'start') return { ...base, after: -1 }
+            const at = list.findIndex((e) => e.scene.id === spot.scene)
+            if (spot.at === 'scene') return { ...base, after: at }
+            if (spot.at === 'top') return { ...base, after: at, shot: '' }
+            return { ...base, after: at, shot: list[at].shots.find((x) => x.id === spot.shot)?.code ?? '' }
           })
         }
       : {}),

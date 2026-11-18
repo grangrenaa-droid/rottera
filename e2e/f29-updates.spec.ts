@@ -82,6 +82,35 @@ async function rpc(userData: string, method: string, params: unknown = {}): Prom
 }
 
 test.describe('F29 updates of 17/11', () => {
+  test('F29-H11 a break goes where its time says among the shots and scenes, and moves when the time changes', async ({ app, page, dialogs, userData }) => {
+    await open(page, dialogs)
+    for (const caption of ['Marina de costas', 'O café caindo']) expect((await rpc(userData, 'add_frame', { caption, scene: '1' })).ok).toBe(true)
+    await menu(app, 'view-shooting')
+    await page.getByRole('button', { name: 'Plano de filmagem' }).click()
+    await page.getByRole('button', { name: 'Novo dia' }).click()
+    for (const n of ['1', '2']) await page.getByLabel(`Dia da cena ${n}`, { exact: true }).selectOption({ label: 'Dia 1' })
+    const time = async (label: string, t: string): Promise<void> => {
+      await page.getByLabel(label).fill(t)
+      await page.getByLabel(label).press('Tab')
+    }
+    await time('Horário do plano 1.1', '10:00')
+    await time('Horário do plano 1.2', '13:00')
+    await time('Horário da cena 2', '14:00')
+    await page.getByRole('button', { name: '+ Pausa' }).click()
+    const shots1 = page.getByRole('list', { name: 'Planos da cena 1' })
+
+    // 12:00: between 1.1 (10:00) and 1.2 (13:00)
+    await time('Horário da pausa 1 de Dia 1', '12:00')
+    await expect(shots1.locator('> li')).toHaveText([/1\.1/, /Almoço/, /1\.2/])
+    // 08:00: before everything
+    await time('Horário da pausa 1 de Dia 1', '08:00')
+    await expect(shots1.locator('.plan-break')).toHaveCount(0)
+    await expect(page.locator('.strips > li').first()).toHaveClass(/plan-break-row/)
+    // 13:30: after scene 1, before scene 2
+    await time('Horário da pausa 1 de Dia 1', '13:30')
+    await expect(page.locator('.strips > li')).toHaveClass([/strip/, /plan-break-row/, /strip/])
+  })
+
   test('F29-H9 the cast tab has no scroll bar of its own', async ({ app, page, dialogs }) => {
     await open(page, dialogs)
     await menu(app, 'view-shooting')
@@ -324,7 +353,7 @@ test.describe('F29 updates of 17/11', () => {
     const sent = await catchReports(app)
     await page.getByRole('button', { name: 'Ordem do dia (PDF)' }).click()
     await expect.poll(sent).not.toBeNull()
-    expect((await sent()).callsheet.breaks).toEqual([{ time: '12:00', label: 'Almoço', length: '45 min' }])
+    expect((await sent()).callsheet.breaks).toEqual([{ time: '12:00', label: 'Almoço', length: '45 min', after: 0 }])
 
     const saved = await saveAs(app, page, dialogs, join(dir, 'pausa.rottera'))
     expect(saved.production.days[0].breaks).toEqual([expect.objectContaining({ kind: 'lunch', time: '12:00', minutes: 45 })])

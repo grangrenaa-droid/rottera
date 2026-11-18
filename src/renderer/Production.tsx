@@ -4,12 +4,14 @@ import { LocationsView } from './Locations'
 import { PeopleView } from './People'
 import { scheduleConflicts } from '../shared/people'
 import type { Report } from '../shared/reports'
-import type { DaySound } from '../shared/production'
+import type { BreakSpot, DaySound } from '../shared/production'
 import { reportToCsv } from '../shared/reports'
 import {
   BREAK_KINDS,
   CATEGORIES,
   addBreak,
+  breakSpot,
+  dayEntries,
   placeBreak,
   removeBreak,
   updateBreak,
@@ -387,13 +389,15 @@ function Plan(p: Props): JSX.Element {
       </div>
     )
   }
-  /** The breaks put right after a scene of a day (or after one of its shots that is no longer there). */
-  const breaksAfterScene = (d: ShootDay, s: SceneInfo): MealBreak[] => {
-    const own = s.id ? entryOf(s, prod, shots, d).shots.map((x) => x.id) : []
-    return (d.breaks ?? []).filter((b) => b.after?.scene === s.id && (!b.after?.shot || !own.includes(b.after.shot)))
+  /** Where each break of a day goes: its place, or where its time puts it among the times of the scenes and shots. */
+  const spotsOf = (d: ShootDay): { b: MealBreak; spot: BreakSpot }[] => {
+    const entries = dayEntries(d, p.scenes, prod, shots)
+    return (d.breaks ?? []).map((b) => ({ b, spot: breakSpot(b, entries) }))
   }
-  /** The breaks that go by their time: no place, or a place whose scene left the day. */
-  const freeBreaks = (d: ShootDay): MealBreak[] => (d.breaks ?? []).filter((b) => !b.after || !d.scenes.includes(b.after.scene))
+  const breaksAt = (d: ShootDay, test: (spot: BreakSpot) => boolean): MealBreak[] =>
+    spotsOf(d)
+      .filter((x) => test(x.spot))
+      .map((x) => x.b)
 
   const strip = (s: SceneInfo, where: { dayId: string | null; pos: number; count: number }): JSX.Element => {
     const day = where.dayId === null ? null : prod.days.find((x) => x.id === where.dayId) ?? null
@@ -492,6 +496,12 @@ function Plan(p: Props): JSX.Element {
         {entry.shots.length > 0 && (
           // the scene's shots from the storyboard, in the order they are filmed; with more than one, each can go to another day
           <ul className="strip-shots" aria-label={`Planos da cena ${s.number}`}>
+            {day &&
+              breaksAt(day, (x) => x.at === 'top' && x.scene === s.id).map((b) => (
+                <li key={b.id} className="plan-break-shot">
+                  {breakChip(day, prod.days.indexOf(day), b)}
+                </li>
+              ))}
             {shotsByTime(entry.shots).map((sh) => (
               <Fragment key={sh.id}>
               <li
@@ -536,9 +546,7 @@ function Plan(p: Props): JSX.Element {
                 )}
               </li>
               {day &&
-                (day.breaks ?? [])
-                  .filter((b) => b.after?.scene === s.id && b.after?.shot === sh.id)
-                  .map((b) => (
+                breaksAt(day, (x) => x.at === 'shot' && x.scene === s.id && x.shot === sh.id).map((b) => (
                     <li key={b.id} className="plan-break-shot">
                       {breakChip(day, prod.days.indexOf(day), b)}
                     </li>
@@ -668,10 +676,15 @@ function Plan(p: Props): JSX.Element {
                   <p className="muted">Nenhuma cena neste dia.</p>
                 ) : (
                   <ol className="strips">
+                    {breaksAt(d, (x) => x.at === 'start').map((b) => (
+                      <li key={b.id} className="plan-break-row">
+                        {breakChip(d, n, b)}
+                      </li>
+                    ))}
                     {list.map((s, i) => (
                       <Fragment key={s.index}>
                         {strip(s, { dayId: d.id, pos: i, count: list.length })}
-                        {breaksAfterScene(d, s).map((b) => (
+                        {breaksAt(d, (x) => x.at === 'scene' && x.scene === s.id).map((b) => (
                           <li key={b.id} className="plan-break-row">
                             {breakChip(d, n, b)}
                           </li>
@@ -680,9 +693,9 @@ function Plan(p: Props): JSX.Element {
                     ))}
                   </ol>
                 )}
-                {freeBreaks(d).length ? (
+                {breaksAt(d, (x) => x.at === 'free').length ? (
                   <div className="plan-breaks" role="group" aria-label={`Pausas de ${dayLabel(d, n)}`}>
-                    {freeBreaks(d).map((b) => breakChip(d, n, b))}
+                    {breaksAt(d, (x) => x.at === 'free').map((b) => breakChip(d, n, b))}
                   </div>
                 ) : null}
                 <textarea

@@ -3,6 +3,9 @@ import {
   addBreak,
   addDay,
   placeBreak,
+  breakSpot,
+  dayEntries,
+  updateBreak,
   cleanProduction,
   dayReport,
   emptyProduction,
@@ -289,5 +292,50 @@ describe('a break put in a place of the day', () => {
       days: [{ id: 'd1', label: '', notes: '', scenes: ['s1'], breaks: [{ id: 'b1', kind: 'lunch', time: '', minutes: 60, after: { scene: 's1', shot: 'f2' } }, { id: 'b2', kind: 'snack', time: '', minutes: 30, after: { scene: 's9' } }] }]
     })
     expect(p.days[0].breaks!.map((x) => x.after)).toEqual([{ scene: 's1', shot: 'f2' }, undefined])
+  })
+})
+
+describe('a break with a time finds its place among the times of the day', () => {
+  function day() {
+    const { p: p0, a } = planned()
+    let p = scheduleScene(p0, 's2', a)
+    p = setShotTime(p, a, 's1', 'f1', '10:00')
+    p = setShotTime(p, a, 's1', 'f2', '13:00')
+    p = setSceneTime(p, a, 's2', '14:00')
+    return { p: addBreak(p, a, 'lunch'), a }
+  }
+  const order = (p: Production): string[] => {
+    const c = dayReport(p.days[0], 0, scenes, p, shots).printed!.callsheet!
+    const html = buildReportHtml({ title: 'x', columns: [], rows: [], scriptTitle: '', callsheet: c })
+    return ['Marina de costas', 'Almoço', 'O café caindo', 'Cena 2'].sort((x, y) => html.indexOf(x) - html.indexOf(y))
+  }
+
+  it('earlier than a shot, it goes before it: between two shots', () => {
+    const { p: p0, a } = day()
+    const p = updateBreak(p0, a, p0.days[0].breaks![0].id, { time: '12:00' })
+    expect(breakSpot(p.days[0].breaks![0], dayEntries(p.days[0], scenes, p, shots))).toEqual({ at: 'shot', scene: 's1', shot: 'f1' })
+    expect(order(p)).toEqual(['Marina de costas', 'Almoço', 'O café caindo', 'Cena 2'])
+  })
+
+  it('earlier than everything, it goes first; later than everything, last', () => {
+    const { p: p0, a } = day()
+    const id = p0.days[0].breaks![0].id
+    const early = updateBreak(p0, a, id, { time: '08:00' })
+    expect(breakSpot(early.days[0].breaks![0], dayEntries(early.days[0], scenes, early, shots))).toEqual({ at: 'start' })
+    expect(order(early)[0]).toBe('Almoço')
+    const late = updateBreak(p0, a, id, { time: '18:00' })
+    expect(breakSpot(late.days[0].breaks![0], dayEntries(late.days[0], scenes, late, shots))).toEqual({ at: 'scene', scene: 's2' })
+  })
+
+  it('changing the time takes back a place it was dragged to', () => {
+    const { p: p0, a } = day()
+    const id = p0.days[0].breaks![0].id
+    let p = placeBreak(p0, a, id, a, { scene: 's2' })
+    expect(p.days[0].breaks![0].after).toEqual({ scene: 's2' })
+    p = updateBreak(p, a, id, { time: '12:00' })
+    expect(p.days[0].breaks![0].after).toBeUndefined()
+    // a place put after the time was written stays
+    p = placeBreak(p, a, id, a, { scene: 's2' })
+    expect(breakSpot(p.days[0].breaks![0], dayEntries(p.days[0], scenes, p, shots))).toEqual({ at: 'scene', scene: 's2' })
   })
 })

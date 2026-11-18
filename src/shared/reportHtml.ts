@@ -144,8 +144,8 @@ function cleanCallSheet(c: CallSheet): CallSheet {
       time: str(b.time, 20),
       label: str(b.label, 60),
       length: str(b.length, 30),
-      ...(typeof b.after === 'number' && Number.isInteger(b.after) && b.after >= 0 ? { after: b.after } : {}),
-      ...(typeof b.shot === 'string' && b.shot ? { shot: str(b.shot, 40) } : {})
+      ...(typeof b.after === 'number' && Number.isInteger(b.after) && b.after >= -1 ? { after: b.after } : {}),
+      ...(typeof b.shot === 'string' ? { shot: str(b.shot, 40) } : {})
     })),
     scenes: list(x.scenes, 2000, (s) => ({
       time: str(s.time, 20),
@@ -183,7 +183,7 @@ function callSheetHtml(c: CallSheet, scriptTitle: string): string {
   const scene = (s: CallSheetScene, i: number): string => {
     const line = [`Cena ${s.number}${s.part ? ' (parte)' : ''}`, s.intExt, s.location, s.dn === 'N' ? 'Noite' : 'Dia', s.pages ? `${s.pages} pág.` : ''].filter(Boolean)
     const shots = s.shots.length
-      ? `<ol class="cs-shots">${s.shots
+      ? `<ol class="cs-shots">${brks.filter((b) => b.after === i && b.shot === '').map(pause).join('')}${s.shots
           .map(
             (h) =>
               `<li class="cs-shot"><span class="cs-t">${esc(h.time)}</span><span class="cs-code">${esc(h.code)}</span><span>${esc(h.text)}</span></li>` +
@@ -206,16 +206,18 @@ function callSheetHtml(c: CallSheet, scriptTitle: string): string {
   // a break put in a place goes there (after its scene, or between its shots); the others go before the first scene
   // shot after their time, and those with no time at the end
   const placed = (b: Brk): boolean => b.after !== undefined && b.after < c.scenes.length
-  const shotPlaced = (b: Brk): boolean => placed(b) && !!b.shot && c.scenes[b.after as number].shots.some((h) => h.code === b.shot)
+  // between shots ('' = at the top of the shot list), when the scene has shots
+  const shotPlaced = (b: Brk): boolean =>
+    placed(b) && (b.after as number) >= 0 && b.shot !== undefined && (b.shot === '' ? c.scenes[b.after as number].shots.length > 0 : c.scenes[b.after as number].shots.some((h) => h.code === b.shot))
   const free = brks.filter((b) => !placed(b))
   const timed = free.filter((b) => b.time).sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0))
   const untimed = free.filter((b) => !b.time)
-  const out: string[] = []
+  const out: string[] = brks.filter((b) => b.after === -1).map(brk)
   c.scenes.forEach((s, i) => {
     while (s.time && timed.length && timed[0].time <= s.time) out.push(brk(timed.shift()!))
     out.push(scene(s, i))
     // after the scene: those put after it, and those put after a shot it no longer has
-    for (const b of brks) if (b.after === i && (!b.shot || !shotPlaced(b))) out.push(brk(b))
+    for (const b of brks) if (b.after === i && !shotPlaced(b)) out.push(brk(b))
   })
   for (const b of [...timed, ...untimed]) out.push(brk(b))
   return head + (c.scenes.length ? out.join('\n') : '<p class="empty">Nenhuma cena neste dia.</p>' + [...timed, ...untimed].map(brk).join(''))

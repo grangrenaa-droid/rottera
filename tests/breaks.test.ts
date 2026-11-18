@@ -50,7 +50,7 @@ describe('meal breaks on a shooting day', () => {
     p = addBreak(p, d, 'snack')
     const c = dayReport(p.days[0], 0, scenes, p).printed!.callsheet!
     expect(c.breaks).toEqual([
-      { time: '12:00', label: 'Almoço', length: '1 h' },
+      { time: '12:00', label: 'Almoço', length: '1 h', after: 0 },
       { time: '', label: 'Lanche', length: '30 min' }
     ])
     const html = buildReportHtml({ title: 'x', columns: [], rows: [], scriptTitle: '', callsheet: c })
